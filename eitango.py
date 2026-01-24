@@ -158,28 +158,33 @@ elif st.session_state.screen == "quiz":
     st.write(f"ヒント：{q['en'][0]}-")
 
     # 判定状態
-    if "judged" not in st.session_state or len(st.session_state.user_answers) <= n:
+    if "judged" not in st.session_state:
         st.session_state.judged = None
 
-    # ===== 入力フォーム =====
-    if st.session_state.judged is None:
-        with st.form(f"quiz_form_{q['id']}"):
-            answer = st.text_input("英語を入力してください")
-            my = st.checkbox("⭐ My単語に追加", value=q["my"])
-            submit = st.form_submit_button("判定")
-            if submit:
-                if answer.strip() == "":
-                    st.warning("英語を入力してください")
-                else:
-                    st.session_state.user_answers.append(answer)
-                    st.session_state.user_my_flags.append(my)
-                    if answer.lower() == q["en"].lower():
-                        st.session_state.judged = "correct"
-                    else:
-                        st.session_state.judged = "wrong"
-                    st.rerun()
+    # フォーム内で判定 + My単語チェック
+    with st.form(f"quiz_form_{q['id']}"):
+        answer = st.text_input("英語を入力してください")
+        my = st.checkbox("⭐ My単語に追加", value=(st.session_state.user_my_flags[n] if n < len(st.session_state.user_my_flags) else q["my"]))
+        submit = st.form_submit_button("判定")
 
-    # ===== 結果表示 & 次へ =====
+        if submit:
+            # ユーザー回答を追加（リストにまだなければ append）
+            if n >= len(st.session_state.user_answers):
+                st.session_state.user_answers.append(answer)
+                st.session_state.user_my_flags.append(my)
+            else:
+                st.session_state.user_answers[n] = answer
+                st.session_state.user_my_flags[n] = my
+
+            # 判定
+            if answer.lower() == q["en"].lower():
+                st.session_state.judged = "correct"
+            else:
+                st.session_state.judged = "wrong"
+
+            st.rerun()
+
+    # 判定後の表示
     if st.session_state.judged is not None:
         if st.session_state.judged == "correct":
             st.success(f"正解！ 答え：{q['en']}")
@@ -190,3 +195,4 @@ elif st.session_state.screen == "quiz":
             st.session_state.num += 1
             st.session_state.judged = None
             st.rerun()
+
