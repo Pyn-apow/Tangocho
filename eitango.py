@@ -27,7 +27,6 @@ NUM_SETS = (TOTAL - 1) // SET_SIZE + 1
 # =====================
 if st.session_state.screen == "title":
     st.title("📘 単語テスト")
-
     st.write("英単語テストへようこそ")
 
     if st.button("スタート"):
@@ -35,7 +34,7 @@ if st.session_state.screen == "title":
 
 
 # =====================
-# 問題選択画面（100問ごと）
+# 問題選択画面
 # =====================
 elif st.session_state.screen == "select":
     st.title("📂 問題選択")
@@ -49,11 +48,11 @@ elif st.session_state.screen == "select":
         st.session_state.set_index = set_no - 1
         st.session_state.num = 0
         st.session_state.screen = "quiz"
-        st.session_state.answer_input = ""
+        st.session_state.pop("answer_input", None)
 
 
 # =====================
-# 回答画面
+# 回答画面（form使用）
 # =====================
 elif st.session_state.screen == "quiz":
     start = st.session_state.set_index * SET_SIZE
@@ -73,12 +72,15 @@ elif st.session_state.screen == "quiz":
     st.write(f"問題 {st.session_state.num + 1} / 100")
     st.subheader(f"{jp}（{en[0]}-）")
 
-    answer = st.text_input(
-        "英語を入力してください",
-        key="answer_input"
-    )
+    # ===== form =====
+    with st.form("answer_form"):
+        answer = st.text_input(
+            "英語を入力してください",
+            key="answer_input"
+        )
+        submitted = st.form_submit_button("判定")
 
-    if st.button("判定"):
+    if submitted:
         if answer.strip() == "":
             st.warning("英語を入力してください")
         elif answer.strip().lower() == en.lower():
