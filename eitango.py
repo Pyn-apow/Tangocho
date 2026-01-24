@@ -85,7 +85,7 @@ elif st.session_state.screen == "select":
         end_id = start_id + 99
 
         # 100語ごとの範囲だけ取得
-        query = supabase.table("words").select("num,jp,en,progression,my").gte("num", start_id).lte("num", end_id)
+        query = supabase.table("words").select("id,jp,en,progression,my").gte("id", start_id).lte("id", end_id)
         if mode == "未習得語":
             query = query.lt("progression", 2)
         elif mode == "my単語":
