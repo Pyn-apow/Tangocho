@@ -9,7 +9,7 @@ row = df.iloc[0]
 jp = row[df.columns[0]]
 en = row[df.columns[1]]
 
-st.write(f"{jp}({en[0]}-)：",key="answer_input")
+st.write(f"{jp}({en[0]}-)：")
 
 answer = st.text_input(
     "英語を入力してください",
