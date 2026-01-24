@@ -5,9 +5,8 @@ import random
 # =====================
 # Supabase 設定
 # =====================
-SUPABASE_URL = st.secrets["SUPABASE_URL"]
-SUPABASE_KEY = st.secrets["SUPABASE_KEY"]                   # あなたの anon key
-
+SUPABASE_URL = "https://xxxx.supabase.co"  # あなたのURL
+SUPABASE_KEY = "xxxx"                     # あなたのanonキー
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # =====================
