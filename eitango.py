@@ -154,7 +154,11 @@ elif st.session_state.screen == "quiz":
     st.write(f"ヒント：{en[0]}-")
 
     with st.form("quiz_form"):
-        answer = st.text_input("英語を入力してください")
+        answer = st.text_input(
+        "英語を入力してください",
+        key="answer_input"
+        )
+
 
         if not st.session_state.judged:
             submit = st.form_submit_button("判定", use_container_width=True)
@@ -199,4 +203,9 @@ elif st.session_state.screen == "quiz":
     if next_btn:
         st.session_state.num += 1
         st.session_state.judged = False
+
+        # ★ 入力を完全に消す
+        st.session_state.pop("answer_input", None)
+
         st.rerun()
+
