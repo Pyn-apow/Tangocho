@@ -103,23 +103,53 @@ elif st.session_state.screen == "quiz":
     if n >= len(questions):
         st.success("🎉 このセットは終了！")
 
-        # セット終了時にまとめてDB更新
-        updates = []
-        for q, answer, my_flag in zip(questions, st.session_state.user_answers, st.session_state.user_my_flags):
-            # progression更新
-            if answer.lower() == q["en"].lower():
-                new_prog = min(q["progression"] + 1, 2)
-            else:
-                new_prog = 0
-            updates.append({"id": q["id"], "progression": new_prog, "my": my_flag})
+        st.write("今回の結果まとめ：")
 
-        for u in updates:
-            supabase.table("words").update({"progression": u["progression"], "my": u["my"]}).eq("id", u["id"]).execute()
+        # 結果一覧を表示
+        for i, (q, answer, my_flag) in enumerate(zip(questions, st.session_state.user_answers, st.session_state.user_my_flags)):
+            col1, col2, col3, col4 = st.columns([1, 2, 2, 1])
 
-        if st.button("問題選択へ戻る", use_container_width=True):
+            # 正誤
+            with col1:
+                if answer.lower() == q["en"].lower():
+                    st.markdown("✅")  # 正解
+                else:
+                    st.markdown("❌")  # 不正解
+
+            # 単語（日本語）
+            with col2:
+                st.write(q["jp"])
+
+            # 習得度バー
+            with col3:
+                # セット回答前の progression から計算
+                if answer.lower() == q["en"].lower():
+                    new_prog = min(q["progression"] + 1, 2)
+                else:
+                    new_prog = 0
+                progress_rate = 0.5 if new_prog == 1 else 1.0 if new_prog == 2 else 0.0
+                st.progress(progress_rate)
+
+            # My単語チェック
+            with col4:
+                my = st.checkbox("⭐", value=my_flag, key=f"my_finish_{q['id']}")
+                st.session_state.user_my_flags[i] = my  # 更新
+
+        # DBにまとめて更新
+        if st.button("DBに反映して問題選択へ戻る", use_container_width=True):
+            updates = []
+            for q, answer, my_flag in zip(questions, st.session_state.user_answers, st.session_state.user_my_flags):
+                if answer.lower() == q["en"].lower():
+                    new_prog = min(q["progression"] + 1, 2)
+                else:
+                    new_prog = 0
+                updates.append({"id": q["id"], "progression": new_prog, "my": my_flag})
+
+            for u in updates:
+                supabase.table("words").update({"progression": u["progression"], "my": u["my"]}).eq("id", u["id"]).execute()
+
             st.session_state.screen = "select"
             st.rerun()
-        st.stop()
 
     q = questions[n]
     st.title("✏️ 単語テスト")
