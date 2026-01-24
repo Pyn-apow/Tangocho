@@ -1,68 +1,54 @@
 import streamlit as st
-import pandas as pd
+from supabase import create_client, Client
 import random
 
-CSV_PATH = "tangocho.csv"
+# =====================
+# Supabase 設定
+# =====================
+SUPABASE_URL = "https://zrxbncjwqjzjudvzehfl.supabase.co"  # あなたの URL
+SUPABASE_KEY = "sb_publishable__QkdLcW7YOOFU6oTc_byXg_YqJm_uK_"                       # あなたの anon key
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # =====================
-# iPhone向けUI調整
-# =====================
-st.markdown("""
-<style>
-button {
-    font-size: 20px !important;
-    height: 60px !important;
-}
-input {
-    font-size: 20px !important;
-}
-</style>
-""", unsafe_allow_html=True)
-
-# =====================
-# セッション初期化
+# Streamlit セッション初期化
 # =====================
 defaults = {
     "screen": "title",
-    "set_index": 0,
     "num": 0,
-    "judged": None,
     "question_indices": [],
     "question_count": 10,
     "mode": "全単語",
+    "current_questions": [],
+    "judged": None,
 }
 for k, v in defaults.items():
     if k not in st.session_state:
         st.session_state[k] = v
 
 # =====================
-# CSV 読み込み
+# 学習度・習得率取得
 # =====================
-df = pd.read_csv(CSV_PATH)
+def get_progress_rate():
+    res = supabase.table("words").select("progression").execute()
+    data = res.data
+    if not data:
+        return 0, 0
+    learned = sum(1 for w in data if w["progression"] == 2)
+    return learned, len(data)
 
-TOTAL = len(df)
-SET_SIZE = 100
-NUM_SETS = (TOTAL - 1) // SET_SIZE + 1
-
-# =====================
-# 学習度・習得率
-# =====================
-learned = (df["progression"] == 2).sum()
-rate = learned / TOTAL if TOTAL else 0
-
+learned, total = get_progress_rate()
+rate = learned / total if total else 0
 st.sidebar.markdown("### 📊 学習状況")
 st.sidebar.progress(rate)
-st.sidebar.write(f"習得済み：{learned} / {TOTAL}（{int(rate*100)}%）")
+st.sidebar.write(f"習得済み：{learned} / {total} ({int(rate*100)}%)")
 
 # =====================
 # タイトル画面
 # =====================
 if st.session_state.screen == "title":
     st.title("📘 単語テスト")
-
     with st.form("title_form"):
         start = st.form_submit_button("スタート", use_container_width=True)
-
     if start:
         st.session_state.screen = "select"
         st.rerun()
@@ -72,97 +58,84 @@ if st.session_state.screen == "title":
 # =====================
 elif st.session_state.screen == "select":
     st.title("📂 問題選択")
-
     with st.form("select_form"):
-        set_no = st.selectbox("セット（100語ごと）", range(1, NUM_SETS + 1))
-        count = st.selectbox("問題数", [5, 10, 20, 30], index=1)
+        question_count = st.selectbox("問題数", [5, 10, 20, 30], index=1)
         mode = st.selectbox("出題範囲", ["全単語", "未習得語", "my単語"])
         start = st.form_submit_button("開始", use_container_width=True)
 
     if start:
-        st.session_state.set_index = set_no - 1
-        st.session_state.question_count = count
+        st.session_state.question_count = question_count
         st.session_state.mode = mode
         st.session_state.num = 0
         st.session_state.judged = None
 
-        start_row = st.session_state.set_index * SET_SIZE
-        end_row = min(start_row + SET_SIZE, TOTAL)
-        subset = df.iloc[start_row:end_row]
-
+        # Supabase から出題条件に応じて取得
+        query = supabase.table("words").select("id,jp,en,progression,my")
         if mode == "未習得語":
-            subset = subset[subset["progression"] < 2]
+            query = query.lt("progression", 2)
         elif mode == "my単語":
-            subset = subset[subset["my"] == 1]
+            query = query.eq("my", True)
+        res = query.execute()
+        questions = res.data or []
 
-        indices = subset.index.tolist()
-        st.session_state.question_indices = random.sample(
-            indices, k=min(count, len(indices))
+        if not questions:
+            st.warning("条件に合う単語がありません。")
+            st.stop()
+
+        # ランダムに抽出
+        st.session_state.current_questions = random.sample(
+            questions, k=min(question_count, len(questions))
         )
-
         st.session_state.screen = "quiz"
         st.rerun()
 
 # =====================
-# 回答画面
+# クイズ画面
 # =====================
 elif st.session_state.screen == "quiz":
-    q = st.session_state.question_indices
     n = st.session_state.num
+    questions = st.session_state.current_questions
 
-    if n >= len(q):
-        st.success("🎉 終了！")
+    if n >= len(questions):
+        st.success("🎉 このセットは終了！")
         if st.button("問題選択へ戻る", use_container_width=True):
             st.session_state.screen = "select"
             st.rerun()
         st.stop()
 
-    idx = q[n]
-    row = df.loc[idx]
-    jp = row["jp"]
-    en = str(row["en"])
-
+    q = questions[n]
     st.title("✏️ 単語テスト")
-    st.write(f"問題 {n+1} / {len(q)}")
-    st.subheader(jp)
-    st.write(f"ヒント：{en[0]}-")
+    st.write(f"問題 {n+1}/{len(questions)}")
+    st.subheader(q["jp"])
+    st.write(f"ヒント：{q['en'][0]}-")
 
-    # ===== 入力（問題番号ごとに key を変える）=====
-    answer = st.text_input(
-        "英語を入力してください",
-        key=f"answer_{n}"
-    )
+    # ===== 入力 =====
+    answer = st.text_input("英語を入力してください", key=f"answer_{q['id']}")
 
-    # ===== 判定前 =====
+    # ===== 判定 =====
     if st.session_state.judged is None:
         if st.button("判定", use_container_width=True):
             if answer.strip() == "":
                 st.warning("英語を入力してください")
-            elif answer.lower() == en.lower():
-                df.at[idx, "progression"] = min(df.at[idx, "progression"] + 1, 2)
-                df.to_csv(CSV_PATH, index=False)
+            elif answer.lower() == q["en"].lower():
+                new_prog = min(q["progression"] + 1, 2)
+                supabase.table("words").update({"progression": new_prog}).eq("id", q["id"]).execute()
                 st.session_state.judged = "correct"
                 st.rerun()
             else:
-                df.at[idx, "progression"] = 0
-                df.to_csv(CSV_PATH, index=False)
+                supabase.table("words").update({"progression": 0}).eq("id", q["id"]).execute()
                 st.session_state.judged = "wrong"
                 st.rerun()
 
-    # ===== 結果表示 =====
+    # ===== 結果表示 & My単語 =====
     else:
         if st.session_state.judged == "correct":
-            st.success(f"正解！ 答え：{en}")
+            st.success(f"正解！ 答え：{q['en']}")
         else:
-            st.error(f"不正解… 答え：{en}")
+            st.error(f"不正解… 答え：{q['en']}")
 
-        my = st.checkbox(
-            "⭐ My単語に追加",
-            value=bool(df.at[idx, "my"]),
-            key=f"my_{idx}"
-        )
-        df.at[idx, "my"] = 1 if my else 0
-        df.to_csv(CSV_PATH, index=False)
+        my = st.checkbox("⭐ My単語に追加", value=q["my"], key=f"my_{q['id']}")
+        supabase.table("words").update({"my": my}).eq("id", q["id"]).execute()
 
         if st.button("次へ", use_container_width=True):
             st.session_state.num += 1
