@@ -10,10 +10,8 @@ SUPABASE_KEY = st.secrets["SUPABASE_KEY"]                   # あなたの anon 
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-SET_SIZE = 100  # 1セットの単語数
-
 # =====================
-# セッション初期化
+# Streamlit セッション初期化
 # =====================
 defaults = {
     "screen": "title",
@@ -30,30 +28,39 @@ for k, v in defaults.items():
         st.session_state[k] = v
 
 # =====================
-# 総単語数・習得率取得
+# 全単語取得（ページング対応）
 # =====================
-def get_total_words():
-    res = supabase.table("words").select("id,progression").execute()
-    data = res.data or []
-    return data
+def fetch_all_words():
+    all_words = []
+    offset = 0
+    while True:
+        res = supabase.table("words").select("id,jp,en,progression,my").limit(1000).offset(offset).execute()
+        batch = res.data or []
+        if not batch:
+            break
+        all_words.extend(batch)
+        offset += 1000
+    return all_words
 
-all_words = get_total_words()
-TOTAL = len(all_words)
-learned = sum(1 for w in all_words if w["progression"] == 2)
+words_list = fetch_all_words()
+TOTAL = len(words_list)
+SET_SIZE = 100
+NUM_SETS = (TOTAL - 1) // SET_SIZE + 1
+
+# =====================
+# 学習度・習得率
+# =====================
+learned = sum(1 for w in words_list if w["progression"] == 2)
 rate = learned / TOTAL if TOTAL else 0
-
 st.sidebar.markdown("### 📊 学習状況")
 st.sidebar.progress(rate)
 st.sidebar.write(f"習得済み：{learned} / {TOTAL} ({int(rate*100)}%)")
-NUM_SETS = (TOTAL - 1) // SET_SIZE + 1
 
 # =====================
 # タイトル画面
 # =====================
 if st.session_state.screen == "title":
     st.title("📘 単語テスト")
-    st.write("英単語テストへようこそ")
-
     with st.form("title_form"):
         start = st.form_submit_button("スタート", use_container_width=True)
     if start:
@@ -78,26 +85,23 @@ elif st.session_state.screen == "select":
         st.session_state.num = 0
         st.session_state.judged = None
 
-        # 出題対象をSupabaseから取得
-        start_id = st.session_state.set_index * SET_SIZE
-        end_id = start_id + SET_SIZE
+        # セットごとに区切る
+        start_idx = st.session_state.set_index * SET_SIZE
+        end_idx = min(start_idx + SET_SIZE, TOTAL)
+        subset = words_list[start_idx:end_idx]
 
-        query = supabase.table("words").select("id,jp,en,progression,my").gte("id", start_id+1).lt("id", end_id+1)
+        # 出題範囲でフィルタ
         if mode == "未習得語":
-            query = query.lt("progression", 2)
+            subset = [w for w in subset if w["progression"] < 2]
         elif mode == "my単語":
-            query = query.eq("my", True)
-        res = query.execute()
-        subset = res.data or []
+            subset = [w for w in subset if w["my"]]
 
         if not subset:
-            st.warning("条件に合う単語がありません。")
+            st.warning("条件に合う単語がありません")
             st.stop()
 
-        # ランダムに抽出
-        st.session_state.current_questions = random.sample(
-            subset, k=min(question_count, len(subset))
-        )
+        # ランダム抽出
+        st.session_state.current_questions = random.sample(subset, k=min(question_count, len(subset)))
         st.session_state.screen = "quiz"
         st.rerun()
 
