@@ -5,7 +5,8 @@ st.title("単語テスト")
 
 df = pd.read_csv("tangocho.csv")
 
-row = df.iloc[0]
+num = 0
+row = df.iloc[num]
 jp = row[df.columns[0]]
 en = row[df.columns[1]]
 
@@ -23,3 +24,4 @@ if st.button("判定"):
         st.success("○ 正解")
     else:
         st.error(f"× 不正解（正解：{en}）")
+    num+=1
