@@ -85,7 +85,7 @@ elif st.session_state.screen == "select":
         end_id = start_id + 99
 
         # 100語ごとの範囲だけ取得
-        query = supabase.table("words").select("id,jp,en,progression,my").gte("num", start_id).lte("num", end_id)
+        query = supabase.table("words").select("num,jp,en,progression,my").gte("num", start_id).lte("num", end_id)
         if mode == "未習得語":
             query = query.lt("progression", 2)
         elif mode == "my単語":
@@ -135,11 +135,11 @@ elif st.session_state.screen == "quiz":
                 st.warning("英語を入力してください")
             elif answer.lower() == q["en"].lower():
                 new_prog = min(q["progression"] + 1, 2)
-                supabase.table("words").update({"progression": new_prog}).eq("num", q["num"]).execute()
+                supabase.table("words").update({"progression": new_prog}).eq("id", q["id"]).execute()
                 q["progression"] = new_prog
                 st.session_state.judged = "correct"
             else:
-                supabase.table("words").update({"progression": 0}).eq("num", q["num"]).execute()
+                supabase.table("words").update({"progression": 0}).eq("id", q["id"]).execute()
                 q["progression"] = 0
                 st.session_state.judged = "wrong"
 
@@ -152,7 +152,7 @@ elif st.session_state.screen == "quiz":
 
         my = st.checkbox("⭐ My単語に追加", value=q["my"], key=f"my_{q['id']}")
         if my != q["my"]:
-            supabase.table("words").update({"my": my}).eq("num", q["num"]).execute()
+            supabase.table("words").update({"my": my}).eq("id", q["id"]).execute()
             q["my"] = my
 
         if st.button("次へ", use_container_width=True):
