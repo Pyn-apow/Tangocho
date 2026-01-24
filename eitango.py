@@ -12,7 +12,7 @@ num_tests = (total_words - 1) // WORDS_PER_TEST + 1
 st.write(f"全{total_words}語 / {num_tests}セットあります")
 
 # どの100語をやるか選択
-test_no = int(st.text_input(f"何セット目をやりますか？ (1～{num_tests})：")) - 1
+test_no = int(st.selectbox(f"何セット目をやりますか？ (1～{num_tests})：",key="set_select")) - 1
 
 start = test_no * WORDS_PER_TEST
 end = start + WORDS_PER_TEST
@@ -26,7 +26,7 @@ for i, row in test_df.iterrows():
     jp = row["jp"]
     en = row["en"]
 
-    answer = st.text_input(f"{jp}({en[0]}-)：").strip()
+    answer = st.text_input(f"{jp}({en[0]}-)：",key="answer_input").strip()
 
     if answer.lower() == en.lower():
         st.write("○ 正解\n")
