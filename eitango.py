@@ -109,20 +109,21 @@ elif st.session_state.screen == "quiz":
         else:
             submit = False
             next_btn = st.form_submit_button("次へ", use_container_width=True)
+            st.info(f"答え：{en}")
+            if st.session_state.judged == "correct":
+                st.success("正解")
+            elif st.session_state.judged == "wrong":
+                st.error("不正解")
 
     # ===== 判定フェーズ =====
     if submit:
         if answer.strip() == "":
             st.warning("英語を入力してください")
         elif answer.lower() == en.lower():
-            st.success("○ 正解")
-            st.info(f"答え：{en}")
-            st.session_state.judged = True
+            st.session_state.judged = "correct"
             st.rerun()
         else:
-            st.error("× 不正解")
-            st.info(f"答え：{en}")
-            st.session_state.judged = True
+            st.session_state.judged = "wrong"
             st.rerun()
 
     # ===== 次へフェーズ =====
