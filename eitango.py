@@ -99,32 +99,36 @@ elif st.session_state.screen == "quiz":
     st.subheader(jp)
     st.write(f"ヒント：{en[0]}-")
 
-    # ===== formは1つ =====
-    with st.form("quiz_form", clear_on_submit=True):
-        answer = st.text_input("英語を入力してください")
+    # ===== フォーム（ボタンは1つ）=====
+    with st.form("quiz_form"):
+        answer = st.text_input(
+            "英語を入力してください",
+            key="answer_input"
+        )
 
-        if not st.session_state.judged:
-            submit = st.form_submit_button("判定", use_container_width=True)
-            next_btn = False
-        else:
-            submit = False
-            next_btn = st.form_submit_button("次へ", use_container_width=True)
+        submit = st.form_submit_button(
+            "判定" if not st.session_state.judged else "次へ",
+            use_container_width=True
+        )
 
-    # ===== 判定フェーズ =====
+    # ===== ボタン処理 =====
     if submit:
-        if answer.strip() == "":
-            st.warning("英語を入力してください")
-        elif answer.lower() == en.lower():
-            st.success("○ 正解")
-            st.info(f"答え：{en}")
-            st.session_state.judged = True
-        else:
-            st.error("× 不正解")
-            st.info(f"答え：{en}")
-            st.session_state.judged = True
+        # --- 判定フェーズ ---
+        if not st.session_state.judged:
+            if answer.strip() == "":
+                st.warning("英語を入力してください")
+            elif answer.lower() == en.lower():
+                st.success("○ 正解")
+                st.info(f"答え：{en}")
+                st.session_state.judged = True
+            else:
+                st.error("× 不正解")
+                st.info(f"答え：{en}")
+                st.session_state.judged = True
 
-    # ===== 次へフェーズ =====
-    if next_btn:
-        st.session_state.num += 1
-        st.session_state.judged = False
-        st.rerun()
+        # --- 次へフェーズ ---
+        else:
+            st.session_state.num += 1
+            st.session_state.judged = False
+            st.session_state.answer_input = ""
+            st.rerun()
