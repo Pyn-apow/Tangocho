@@ -72,27 +72,22 @@ elif st.session_state.screen == "select":
         st.session_state.pop("answer_input", None)
         st.rerun()
 
-
 # =====================
-# 回答画面
+# 回答画面（判定 → 次へ方式）
 # =====================
 elif st.session_state.screen == "quiz":
+
+    if "judged" not in st.session_state:
+        st.session_state.judged = False
+
     start = st.session_state.set_index * SET_SIZE
     index = start + st.session_state.num
 
     if index >= min(start + SET_SIZE, TOTAL):
         st.success("🎉 このセットは終了です！")
-
-        with st.form("end_form"):
-            back = st.form_submit_button(
-                "問題選択へ戻る",
-                use_container_width=True
-            )
-
-        if back:
+        if st.button("問題選択へ戻る"):
             st.session_state.screen = "select"
             st.rerun()
-
         st.stop()
 
     row = df.iloc[index]
@@ -104,34 +99,32 @@ elif st.session_state.screen == "quiz":
     st.subheader(jp)
     st.write(f"ヒント：{en[0]}-")
 
-    # ===== 回答 form（1つだけ）=====
+    # ===== formは1つ =====
     with st.form("quiz_form", clear_on_submit=True):
         answer = st.text_input("英語を入力してください")
 
-        col1, col2 = st.columns(2)
-        with col1:
-            submit = st.form_submit_button(
-                "判定",
-                use_container_width=True
-            )
-        with col2:
-            back = st.form_submit_button(
-                "中断",
-                use_container_width=True
-            )
+        if not st.session_state.judged:
+            submit = st.form_submit_button("判定", use_container_width=True)
+            next_btn = False
+        else:
+            submit = False
+            next_btn = st.form_submit_button("次へ", use_container_width=True)
 
+    # ===== 判定フェーズ =====
     if submit:
         if answer.strip() == "":
             st.warning("英語を入力してください")
         elif answer.lower() == en.lower():
             st.success("○ 正解")
-            st.session_state.num += 1
-            st.rerun()
+            st.info(f"答え：{en}")
+            st.session_state.judged = True
         else:
-            st.error(f"× 不正解（正解：{en}）")
-            st.session_state.num += 1
-            st.rerun()
+            st.error("× 不正解")
+            st.info(f"答え：{en}")
+            st.session_state.judged = True
 
-    if back:
-        st.session_state.screen = "select"
+    # ===== 次へフェーズ =====
+    if next_btn:
+        st.session_state.num += 1
+        st.session_state.judged = False
         st.rerun()
