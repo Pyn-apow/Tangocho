@@ -7,7 +7,7 @@ df = pd.read_csv("tangocho.csv")
 
 num = 0
 row = df.iloc[num]
-jp = row[df.columns[0]]
+jp = row[df.columns[2]]
 en = row[df.columns[1]]
 
 st.write(f"{jp}({en[0]}-)：")
