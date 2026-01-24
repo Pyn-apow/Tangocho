@@ -52,7 +52,7 @@ if st.session_state.screen == "title":
     st.title("📘 単語テスト")
     if st.button("スタート", use_container_width=True):
         st.session_state.screen = "select"
-        st.experimental_rerun()
+        st.rerun()
 
 # ===================== 問題選択画面 =====================
 elif st.session_state.screen == "select":
@@ -94,7 +94,7 @@ elif st.session_state.screen == "select":
             questions_in_set, k=min(question_count, len(questions_in_set))
         )
         st.session_state.screen = "quiz"
-        st.experimental_rerun()
+        st.rerun()
 
 # ===================== クイズ画面 =====================
 elif st.session_state.screen == "quiz":
@@ -104,7 +104,7 @@ elif st.session_state.screen == "quiz":
     # ----------------- 安全チェック -----------------
     if n >= len(questions):
         st.session_state.screen = "finish"
-        st.experimental_rerun()
+        st.rerun()
 
     q = questions[n]
 
@@ -135,7 +135,7 @@ elif st.session_state.screen == "quiz":
             else:
                 st.session_state.judged = "wrong"
 
-            st.experimental_rerun()
+            st.rerun()
 
     # ----------------- 判定後の表示 -----------------
     if st.session_state.judged is not None:
@@ -147,7 +147,7 @@ elif st.session_state.screen == "quiz":
         if st.button("次へ", use_container_width=True):
             st.session_state.num += 1
             st.session_state.judged = None
-            st.experimental_rerun()
+            st.rerun()
 
 # ===================== セット終了画面 =====================
 elif st.session_state.screen == "finish":
@@ -190,4 +190,4 @@ elif st.session_state.screen == "finish":
 
         # 次のセットへ
         st.session_state.screen = "select"
-        st.experimental_rerun()
+        st.rerun()
