@@ -12,7 +12,7 @@ num_tests = (total_words - 1) // WORDS_PER_TEST + 1
 st.write(f"全{total_words}語 / {num_tests}セットあります")
 
 # どの100語をやるか選択
-test_no = int(st.selectbox(f"何セット目をやりますか？ (1～{num_tests})：",key="set_select")) - 1
+test_no = int(st.selectbox(f"何セット目をやりますか？ (1～{num_tests})：",options=list(range(1, num_tests + 1)),key="set_select")) - 1
 
 start = test_no * WORDS_PER_TEST
 end = start + WORDS_PER_TEST
