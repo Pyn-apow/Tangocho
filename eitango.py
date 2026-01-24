@@ -28,33 +28,21 @@ for k, v in defaults.items():
         st.session_state[k] = v
 
 # =====================
-# 全単語取得（ページング対応）
+# 総単語数と学習率取得
 # =====================
-def fetch_all_words():
-    all_words = []
-    offset = 0
-    while True:
-        res = supabase.table("words").select("id,jp,en,progression,my").limit(1000).offset(offset).execute()
-        batch = res.data or []
-        if not batch:
-            break
-        all_words.extend(batch)
-        offset += 1000
-    return all_words
+def get_progress_rate():
+    res = supabase.table("words").select("progression").execute()
+    data = res.data
+    if not data:
+        return 0, 0
+    learned = sum(1 for w in data if w["progression"] == 2)
+    return learned, len(data)
 
-words_list = fetch_all_words()
-TOTAL = len(words_list)
-SET_SIZE = 100
-NUM_SETS = (TOTAL - 1) // SET_SIZE + 1
-
-# =====================
-# 学習度・習得率
-# =====================
-learned = sum(1 for w in words_list if w["progression"] == 2)
-rate = learned / TOTAL if TOTAL else 0
+learned, total = get_progress_rate()
+rate = learned / total if total else 0
 st.sidebar.markdown("### 📊 学習状況")
 st.sidebar.progress(rate)
-st.sidebar.write(f"習得済み：{learned} / {TOTAL} ({int(rate*100)}%)")
+st.sidebar.write(f"習得済み：{learned} / {total} ({int(rate*100)}%)")
 
 # =====================
 # タイトル画面
@@ -72,8 +60,11 @@ if st.session_state.screen == "title":
 # =====================
 elif st.session_state.screen == "select":
     st.title("📂 問題選択")
+
+    # 総単語数を100語ごとにセット化
+    TOTAL_SETS = (total - 1) // 100 + 1
     with st.form("select_form"):
-        set_no = st.selectbox("セット（100語ごと）", list(range(1, NUM_SETS + 1)))
+        set_no = st.selectbox("セット（100語ごと）", list(range(1, TOTAL_SETS + 1)))
         question_count = st.selectbox("問題数", [5, 10, 20, 30], index=1)
         mode = st.selectbox("出題範囲", ["全単語", "未習得語", "my単語"])
         start = st.form_submit_button("開始", use_container_width=True)
@@ -85,23 +76,32 @@ elif st.session_state.screen == "select":
         st.session_state.num = 0
         st.session_state.judged = None
 
-        # セットごとに区切る
-        start_idx = st.session_state.set_index * SET_SIZE
-        end_idx = min(start_idx + SET_SIZE, TOTAL)
-        subset = words_list[start_idx:end_idx]
+        # =====================
+        # Supabase から問題取得
+        # =====================
+        start_id = st.session_state.set_index * 100
+        end_id = min(start_id + 100, total)
 
-        # 出題範囲でフィルタ
+        query = supabase.table("words").select("id,jp,en,progression,my")
         if mode == "未習得語":
-            subset = [w for w in subset if w["progression"] < 2]
+            query = query.lt("progression", 2)
         elif mode == "my単語":
-            subset = [w for w in subset if w["my"]]
+            query = query.eq("my", True)
 
-        if not subset:
-            st.warning("条件に合う単語がありません")
+        res = query.execute()
+        all_words = res.data or []
+
+        # セット内の範囲に絞る
+        words_in_set = [w for w in all_words if start_id <= w["id"] < end_id]
+
+        if not words_in_set:
+            st.warning("条件に合う単語がありません。")
             st.stop()
 
         # ランダム抽出
-        st.session_state.current_questions = random.sample(subset, k=min(question_count, len(subset)))
+        st.session_state.current_questions = random.sample(
+            words_in_set, k=min(question_count, len(words_in_set))
+        )
         st.session_state.screen = "quiz"
         st.rerun()
 
@@ -136,12 +136,12 @@ elif st.session_state.screen == "quiz":
             elif answer.lower() == q["en"].lower():
                 new_prog = min(q["progression"] + 1, 2)
                 supabase.table("words").update({"progression": new_prog}).eq("id", q["id"]).execute()
+                q["progression"] = new_prog
                 st.session_state.judged = "correct"
-                st.rerun()
             else:
                 supabase.table("words").update({"progression": 0}).eq("id", q["id"]).execute()
+                q["progression"] = 0
                 st.session_state.judged = "wrong"
-                st.rerun()
 
     # ===== 結果表示 & My単語 =====
     else:
@@ -151,7 +151,9 @@ elif st.session_state.screen == "quiz":
             st.error(f"不正解… 答え：{q['en']}")
 
         my = st.checkbox("⭐ My単語に追加", value=q["my"], key=f"my_{q['id']}")
-        supabase.table("words").update({"my": my}).eq("id", q["id"]).execute()
+        if my != q["my"]:
+            supabase.table("words").update({"my": my}).eq("id", q["id"]).execute()
+            q["my"] = my
 
         if st.button("次へ", use_container_width=True):
             st.session_state.num += 1
