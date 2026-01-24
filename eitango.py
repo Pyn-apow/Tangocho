@@ -145,8 +145,8 @@ elif st.session_state.screen == "quiz":
     index = questions[num]
     row = df.loc[index]
 
-    jp = row["日本語"]
-    en = str(row["英語"])
+    jp = row["jp"]
+    en = str(row["en"])
 
     st.title("✏️ 単語テスト")
     st.write(f"問題 {num + 1} / {len(questions)}")
