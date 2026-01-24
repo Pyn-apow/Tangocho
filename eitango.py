@@ -26,21 +26,22 @@ for k, v in defaults.items():
         st.session_state[k] = v
 
 # =====================
-# 総単語数と学習率取得（分割で取得）
+# 総単語数と学習率取得
 # =====================
-def get_progress_rate(batch_size=1000):
+def get_progress_rate():
     learned, total = 0, 0
     offset = 0
+    limit = 1000  # Supabaseの一度に取得できる件数
     while True:
-        res = supabase.table("words").select("progression").range(offset, offset + batch_size - 1).execute()
+        res = supabase.table("words").select("progression").range(offset, offset + limit - 1).execute()
         data = res.data or []
         if not data:
             break
         learned += sum(1 for w in data if w["progression"] == 2)
         total += len(data)
-        if len(data) < batch_size:
+        if len(data) < limit:
             break
-        offset += batch_size
+        offset += limit
     return learned, total
 
 learned, total = get_progress_rate()
@@ -80,16 +81,11 @@ elif st.session_state.screen == "select":
         st.session_state.num = 0
         st.session_state.judged = None
 
-        # セットの範囲
-        start_num = st.session_state.set_index * 100
-        end_num = start_num + 99
+        start_id = st.session_state.set_index * 100
+        end_id = start_id + 99
 
-        # =====================
-        # Supabase から問題取得（条件 + limit で軽量化）
-        # =====================
-        query = supabase.table("words").select("num,jp,en,progression,my") \
-            .gte("num", start_num).lte("num", end_num).limit(question_count * 3)
-
+        # 100語ごとの範囲だけ取得
+        query = supabase.table("words").select("id,jp,en,progression,my").gte("id", start_id).lte("id", end_id)
         if mode == "未習得語":
             query = query.lt("progression", 2)
         elif mode == "my単語":
@@ -102,7 +98,7 @@ elif st.session_state.screen == "select":
             st.warning("条件に合う単語がありません。")
             st.stop()
 
-        # ランダム抽出（Python側で1回のみ）
+        # ランダム抽出
         st.session_state.current_questions = random.sample(
             words_in_set, k=min(question_count, len(words_in_set))
         )
@@ -130,7 +126,7 @@ elif st.session_state.screen == "quiz":
     st.write(f"ヒント：{q['en'][0]}-")
 
     # ===== 入力 =====
-    answer = st.text_input("英語を入力してください", key=f"answer_{q['num']}")
+    answer = st.text_input("英語を入力してください", key=f"answer_{q['id']}")
 
     # ===== 判定 =====
     if st.session_state.judged is None:
@@ -139,11 +135,11 @@ elif st.session_state.screen == "quiz":
                 st.warning("英語を入力してください")
             elif answer.lower() == q["en"].lower():
                 new_prog = min(q["progression"] + 1, 2)
-                supabase.table("words").update({"progression": new_prog}).eq("num", q["num"]).execute()
+                supabase.table("words").update({"progression": new_prog}).eq("id", q["id"]).execute()
                 q["progression"] = new_prog
                 st.session_state.judged = "correct"
             else:
-                supabase.table("words").update({"progression": 0}).eq("num", q["num"]).execute()
+                supabase.table("words").update({"progression": 0}).eq("id", q["id"]).execute()
                 q["progression"] = 0
                 st.session_state.judged = "wrong"
 
@@ -154,9 +150,9 @@ elif st.session_state.screen == "quiz":
         else:
             st.error(f"不正解… 答え：{q['en']}")
 
-        my = st.checkbox("⭐ My単語に追加", value=q["my"], key=f"my_{q['num']}")
+        my = st.checkbox("⭐ My単語に追加", value=q["my"], key=f"my_{q['id']}")
         if my != q["my"]:
-            supabase.table("words").update({"my": my}).eq("num", q["num"]).execute()
+            supabase.table("words").update({"my": my}).eq("id", q["id"]).execute()
             q["my"] = my
 
         if st.button("次へ", use_container_width=True):
