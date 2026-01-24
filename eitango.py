@@ -16,11 +16,14 @@ if "screen" not in st.session_state:
         "question_count": 10,
         "mode": "全単語",
         "current_questions": [],
-        "questions_cache": {},  # セットごとのキャッシュ
+        "user_answers": [],   # ユーザーの回答を保持
+        "user_my_flags": [],  # My単語チェックを保持
+        "questions_cache": {},  # セットキャッシュ
+        "progress_cache": None, # 総学習状況キャッシュ
     })
 
 # ===================== 総単語数と学習率 =====================
-def get_progress_rate():
+if st.session_state.progress_cache is None:
     learned, total = 0, 0
     offset = 0
     limit = 1000
@@ -34,9 +37,10 @@ def get_progress_rate():
         if len(data) < limit:
             break
         offset += limit
-    return learned, total
+    st.session_state.progress_cache = (learned, total)
+else:
+    learned, total = st.session_state.progress_cache
 
-learned, total = get_progress_rate()
 rate = learned / total if total else 0
 st.sidebar.markdown("### 📊 学習状況")
 st.sidebar.progress(rate)
@@ -52,7 +56,6 @@ if st.session_state.screen == "title":
 # ===================== 問題選択画面 =====================
 elif st.session_state.screen == "select":
     st.title("📂 問題選択")
-
     TOTAL_SETS = (total - 1) // 100 + 1
     set_no = st.selectbox("セット（100語ごと）", list(range(1, TOTAL_SETS + 1)))
     question_count = st.selectbox("問題数", [5, 10, 20, 30], index=1)
@@ -63,6 +66,8 @@ elif st.session_state.screen == "select":
         st.session_state.question_count = question_count
         st.session_state.mode = mode
         st.session_state.num = 0
+        st.session_state.user_answers = []
+        st.session_state.user_my_flags = []
 
         # キャッシュ確認
         cache_key = f"set_{set_no}_{mode}"
@@ -71,16 +76,13 @@ elif st.session_state.screen == "select":
         else:
             start_id = st.session_state.set_index * 100
             end_id = start_id + 99
-
             query = supabase.table("words").select("id,jp,en,progression,my").gte("id", start_id).lte("id", end_id)
             if mode == "未習得語":
                 query = query.lt("progression", 2)
             elif mode == "my単語":
                 query = query.eq("my", True)
-
             res = query.execute()
             questions_in_set = res.data or []
-
             st.session_state.questions_cache[cache_key] = questions_in_set
 
         if not questions_in_set:
@@ -93,12 +95,27 @@ elif st.session_state.screen == "select":
         st.session_state.screen = "quiz"
         st.rerun()
 
+# ===================== クイズ画面 =====================
 elif st.session_state.screen == "quiz":
     n = st.session_state.num
     questions = st.session_state.current_questions
 
     if n >= len(questions):
         st.success("🎉 このセットは終了！")
+
+        # セット終了時にまとめてDB更新
+        updates = []
+        for q, answer, my_flag in zip(questions, st.session_state.user_answers, st.session_state.user_my_flags):
+            # progression更新
+            if answer.lower() == q["en"].lower():
+                new_prog = min(q["progression"] + 1, 2)
+            else:
+                new_prog = 0
+            updates.append({"id": q["id"], "progression": new_prog, "my": my_flag})
+
+        for u in updates:
+            supabase.table("words").update({"progression": u["progression"], "my": u["my"]}).eq("id", u["id"]).execute()
+
         if st.button("問題選択へ戻る", use_container_width=True):
             st.session_state.screen = "select"
             st.rerun()
@@ -110,8 +127,8 @@ elif st.session_state.screen == "quiz":
     st.subheader(q["jp"])
     st.write(f"ヒント：{q['en'][0]}-")
 
-    # 判定段階管理用
-    if "judged" not in st.session_state:
+    # 判定状態
+    if "judged" not in st.session_state or len(st.session_state.user_answers) <= n:
         st.session_state.judged = None
 
     # ===== 入力フォーム =====
@@ -123,33 +140,23 @@ elif st.session_state.screen == "quiz":
             if submit:
                 if answer.strip() == "":
                     st.warning("英語を入力してください")
-                elif answer.lower() == q["en"].lower():
-                    new_prog = min(q["progression"] + 1, 2)
-                    supabase.table("words").update({"progression": new_prog}).eq("id", q["id"]).execute()
-                    q["progression"] = new_prog
-                    st.session_state.judged = "correct"
                 else:
-                    supabase.table("words").update({"progression": 0}).eq("id", q["id"]).execute()
-                    q["progression"] = 0
-                    st.session_state.judged = "wrong"
-                st.session_state.current_answer = answer
-                st.session_state.my_checked = my
+                    st.session_state.user_answers.append(answer)
+                    st.session_state.user_my_flags.append(my)
+                    if answer.lower() == q["en"].lower():
+                        st.session_state.judged = "correct"
+                    else:
+                        st.session_state.judged = "wrong"
+                    st.rerun()
 
     # ===== 結果表示 & 次へ =====
     if st.session_state.judged is not None:
         if st.session_state.judged == "correct":
             st.success(f"正解！ 答え：{q['en']}")
         else:
-            st.error(f"不正解… 答え：{q['en']} (あなたの答え: {st.session_state.current_answer}) )")
-
-        # My単語更新
-        if st.session_state.my_checked != q["my"]:
-            supabase.table("words").update({"my": st.session_state.my_checked}).eq("id", q["id"]).execute()
-            q["my"] = st.session_state.my_checked
+            st.error(f"不正解… 答え：{q['en']} (あなたの答え: {st.session_state.user_answers[n]}) )")
 
         if st.button("次へ", use_container_width=True):
             st.session_state.num += 1
             st.session_state.judged = None
             st.rerun()
-
-
