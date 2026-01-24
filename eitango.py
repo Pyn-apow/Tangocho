@@ -13,7 +13,7 @@ if "screen" not in st.session_state:
         "screen": "title",
         "set_index": 0,
         "num": 0,
-        "question_count": 10,
+        "question_count": 5,
         "mode": "全単語",
         "current_questions": [],
         "user_answers": [],   # ユーザーの回答を保持
@@ -58,7 +58,7 @@ elif st.session_state.screen == "select":
     st.title("📂 問題選択")
     TOTAL_SETS = (total - 1) // 100 + 1
     set_no = st.selectbox("セット（100語ごと）", list(range(1, TOTAL_SETS + 1)))
-    question_count = st.selectbox("問題数", [5, 10, 20, 30], index=1)
+    question_count = st.selectbox("問題数", [3,5,10,20], index=1)
     mode = st.selectbox("出題範囲", ["全単語", "未習得語", "my単語"])
     
     if st.button("開始", use_container_width=True):
@@ -161,20 +161,22 @@ elif st.session_state.screen == "quiz":
     if "judged" not in st.session_state:
         st.session_state.judged = None
 
-    # フォーム内で判定 + My単語チェック
+    # 判定前の準備：リストをn+1長にする
+    while len(st.session_state.user_answers) <= n:
+        st.session_state.user_answers.append("")  # 空文字で埋める
+    while len(st.session_state.user_my_flags) <= n:
+        st.session_state.user_my_flags.append(q["my"])  # 元の値で埋める
+
+    # フォーム
     with st.form(f"quiz_form_{q['id']}"):
-        answer = st.text_input("英語を入力してください")
-        my = st.checkbox("⭐ My単語に追加", value=(st.session_state.user_my_flags[n] if n < len(st.session_state.user_my_flags) else q["my"]))
+        answer = st.text_input("英語を入力してください", value=st.session_state.user_answers[n])
+        my = st.checkbox("⭐ My単語に追加", value=st.session_state.user_my_flags[n])
         submit = st.form_submit_button("判定")
 
         if submit:
-            # ユーザー回答を追加（リストにまだなければ append）
-            if n >= len(st.session_state.user_answers):
-                st.session_state.user_answers.append(answer)
-                st.session_state.user_my_flags.append(my)
-            else:
-                st.session_state.user_answers[n] = answer
-                st.session_state.user_my_flags[n] = my
+            # 入力値をリストに保存
+            st.session_state.user_answers[n] = answer
+            st.session_state.user_my_flags[n] = my
 
             # 判定
             if answer.lower() == q["en"].lower():
@@ -183,6 +185,7 @@ elif st.session_state.screen == "quiz":
                 st.session_state.judged = "wrong"
 
             st.rerun()
+
 
     # 判定後の表示
     if st.session_state.judged is not None:
