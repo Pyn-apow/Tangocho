@@ -7,13 +7,17 @@ import random
 # =====================
 SUPABASE_URL = st.secrets["SUPABASE_URL"]
 SUPABASE_KEY = st.secrets["SUPABASE_KEY"]                   # あなたの anon key
+
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+SET_SIZE = 100  # 1セットの単語数
+
 # =====================
-# Streamlit セッション初期化
+# セッション初期化
 # =====================
 defaults = {
     "screen": "title",
+    "set_index": 0,
     "num": 0,
     "question_indices": [],
     "question_count": 10,
@@ -26,27 +30,30 @@ for k, v in defaults.items():
         st.session_state[k] = v
 
 # =====================
-# 学習度・習得率取得
+# 総単語数・習得率取得
 # =====================
-def get_progress_rate():
-    res = supabase.table("words").select("progression").execute()
-    data = res.data
-    if not data:
-        return 0, 0
-    learned = sum(1 for w in data if w["progression"] == 2)
-    return learned, len(data)
+def get_total_words():
+    res = supabase.table("words").select("id,progression").execute()
+    data = res.data or []
+    return data
 
-learned, total = get_progress_rate()
-rate = learned / total if total else 0
+all_words = get_total_words()
+TOTAL = len(all_words)
+learned = sum(1 for w in all_words if w["progression"] == 2)
+rate = learned / TOTAL if TOTAL else 0
+
 st.sidebar.markdown("### 📊 学習状況")
 st.sidebar.progress(rate)
-st.sidebar.write(f"習得済み：{learned} / {total} ({int(rate*100)}%)")
+st.sidebar.write(f"習得済み：{learned} / {TOTAL} ({int(rate*100)}%)")
+NUM_SETS = (TOTAL - 1) // SET_SIZE + 1
 
 # =====================
 # タイトル画面
 # =====================
 if st.session_state.screen == "title":
     st.title("📘 単語テスト")
+    st.write("英単語テストへようこそ")
+
     with st.form("title_form"):
         start = st.form_submit_button("スタート", use_container_width=True)
     if start:
@@ -59,32 +66,37 @@ if st.session_state.screen == "title":
 elif st.session_state.screen == "select":
     st.title("📂 問題選択")
     with st.form("select_form"):
+        set_no = st.selectbox("セット（100語ごと）", list(range(1, NUM_SETS + 1)))
         question_count = st.selectbox("問題数", [5, 10, 20, 30], index=1)
         mode = st.selectbox("出題範囲", ["全単語", "未習得語", "my単語"])
         start = st.form_submit_button("開始", use_container_width=True)
 
     if start:
+        st.session_state.set_index = set_no - 1
         st.session_state.question_count = question_count
         st.session_state.mode = mode
         st.session_state.num = 0
         st.session_state.judged = None
 
-        # Supabase から出題条件に応じて取得
-        query = supabase.table("words").select("id,jp,en,progression,my")
+        # 出題対象をSupabaseから取得
+        start_id = st.session_state.set_index * SET_SIZE
+        end_id = start_id + SET_SIZE
+
+        query = supabase.table("words").select("id,jp,en,progression,my").gte("id", start_id+1).lt("id", end_id+1)
         if mode == "未習得語":
             query = query.lt("progression", 2)
         elif mode == "my単語":
             query = query.eq("my", True)
         res = query.execute()
-        questions = res.data or []
+        subset = res.data or []
 
-        if not questions:
+        if not subset:
             st.warning("条件に合う単語がありません。")
             st.stop()
 
         # ランダムに抽出
         st.session_state.current_questions = random.sample(
-            questions, k=min(question_count, len(questions))
+            subset, k=min(question_count, len(subset))
         )
         st.session_state.screen = "quiz"
         st.rerun()
