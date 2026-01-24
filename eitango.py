@@ -105,9 +105,7 @@ elif st.session_state.screen == "select":
         st.session_state.screen = "quiz"
         st.rerun()
 
-# =====================
-# クイズ画面
-# =====================
+# ===================== クイズ画面 =====================
 elif st.session_state.screen == "quiz":
     n = st.session_state.num
     questions = st.session_state.current_questions
@@ -125,37 +123,32 @@ elif st.session_state.screen == "quiz":
     st.subheader(q["jp"])
     st.write(f"ヒント：{q['en'][0]}-")
 
-    # ===== 入力 =====
-    answer = st.text_input("英語を入力してください", key=f"answer_{q['id']}")
+    # ===== 入力 & 判定 =====
+    with st.form(f"quiz_form_{q['id']}"):
+        answer = st.text_input("英語を入力してください")
+        my = st.checkbox("⭐ My単語に追加", value=q["my"])
+        submit = st.form_submit_button("判定")
 
-    # ===== 判定 =====
-    if st.session_state.judged is None:
-        if st.button("判定", use_container_width=True):
+        if submit:
             if answer.strip() == "":
                 st.warning("英語を入力してください")
             elif answer.lower() == q["en"].lower():
                 new_prog = min(q["progression"] + 1, 2)
                 supabase.table("words").update({"progression": new_prog}).eq("id", q["id"]).execute()
                 q["progression"] = new_prog
-                st.session_state.judged = "correct"
+                st.success(f"正解！ 答え：{q['en']}")
             else:
                 supabase.table("words").update({"progression": 0}).eq("id", q["id"]).execute()
                 q["progression"] = 0
-                st.session_state.judged = "wrong"
+                st.error(f"不正解… 答え：{q['en']}")
 
-    # ===== 結果表示 & My単語 =====
-    else:
-        if st.session_state.judged == "correct":
-            st.success(f"正解！ 答え：{q['en']}")
-        else:
-            st.error(f"不正解… 答え：{q['en']}")
+            # My単語更新
+            if my != q["my"]:
+                supabase.table("words").update({"my": my}).eq("id", q["id"]).execute()
+                q["my"] = my
 
-        my = st.checkbox("⭐ My単語に追加", value=q["my"], key=f"my_{q['id']}")
-        if my != q["my"]:
-            supabase.table("words").update({"my": my}).eq("id", q["id"]).execute()
-            q["my"] = my
+            # 次の問題ボタン
+            if st.button("次へ", use_container_width=True):
+                st.session_state.num += 1
+                st.rerun()
 
-        if st.button("次へ", use_container_width=True):
-            st.session_state.num += 1
-            st.session_state.judged = None
-            st.rerun()
