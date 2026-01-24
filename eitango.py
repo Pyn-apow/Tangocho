@@ -84,7 +84,8 @@ elif st.session_state.screen == "quiz":
         elif answer.strip().lower() == en.lower():
             st.success("○ 正解")
             st.session_state.num += 1
-            st.session_state.answer_input = ""
+            st.session_state.pop("answer_input", None)
+            st.rerun()
         else:
             st.error(f"× 不正解（正解：{en}）")
 
