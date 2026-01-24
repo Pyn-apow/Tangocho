@@ -12,21 +12,12 @@ SUPABASE_KEY = st.secrets["SUPABASE_KEY"]                   # あなたの anon 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # =====================
-# ユーザーID（簡易、ブラウザごとランダム）
-# =====================
-if "user_id" not in st.session_state:
-    st.session_state.user_id = str(uuid.uuid4())
-
-user_id = st.session_state.user_id
-
-# =====================
 # セッション初期化
 # =====================
 defaults = {
     "screen": "title",
     "set_index": 0,
     "num": 0,
-    "question_indices": [],
     "question_count": 10,
     "mode": "全単語",
     "current_questions": [],
@@ -36,8 +27,17 @@ for k, v in defaults.items():
     if k not in st.session_state:
         st.session_state[k] = v
 
+SET_SIZE = 100  # 1セットあたりの単語数
+
 # =====================
-# 単語総数・学習率取得
+# 総単語数取得
+# =====================
+res = supabase.table("words").select("id").execute()
+TOTAL = len(res.data) if res.data else 0
+NUM_SETS = (TOTAL - 1) // SET_SIZE + 1
+
+# =====================
+# 学習度・習得率表示
 # =====================
 def get_progress_rate():
     res = supabase.table("words").select("progression").execute()
@@ -67,16 +67,8 @@ if st.session_state.screen == "title":
 # =====================
 elif st.session_state.screen == "select":
     st.title("📂 問題選択")
-    
-    # 前回状態を取得
-    user_state = supabase.table("user_progress").select("last_set,last_index").eq("user_id", user_id).execute()
-    last_set, last_index = 0, 0
-    if user_state.data:
-        last_set = user_state.data[0]["last_set"]
-        last_index = user_state.data[0]["last_index"]
-
     with st.form("select_form"):
-        set_no = st.selectbox("セット（100語ごと）", range(1, (total-1)//100 + 2), index=last_set)
+        set_no = st.selectbox("セット（100語ごと）", list(range(1, NUM_SETS + 1)))
         question_count = st.selectbox("問題数", [5, 10, 20, 30], index=1)
         mode = st.selectbox("出題範囲", ["全単語", "未習得語", "my単語"])
         start = st.form_submit_button("開始", use_container_width=True)
@@ -88,9 +80,10 @@ elif st.session_state.screen == "select":
         st.session_state.num = 0
         st.session_state.judged = None
 
-        # 出題条件に応じてSupabaseから取得
-        offset = st.session_state.set_index * 100
-        query = supabase.table("words").select("id,jp,en,progression,my").range(offset, offset+99)
+        # 100語ブロック取得
+        offset = st.session_state.set_index * SET_SIZE
+        end = offset + SET_SIZE - 1
+        query = supabase.table("words").select("id,jp,en,progression,my").range(offset, end)
         if mode == "未習得語":
             query = query.lt("progression", 2)
         elif mode == "my単語":
@@ -102,7 +95,7 @@ elif st.session_state.screen == "select":
             st.warning("条件に合う単語がありません。")
             st.stop()
 
-        # 取得した順番のままランダムサンプリング
+        # ランダム抽出
         st.session_state.current_questions = random.sample(
             questions, k=min(question_count, len(questions))
         )
@@ -129,10 +122,10 @@ elif st.session_state.screen == "quiz":
     st.subheader(q["jp"])
     st.write(f"ヒント：{q['en'][0]}-")
 
-    # ===== 入力 =====
+    # 入力
     answer = st.text_input("英語を入力してください", key=f"answer_{q['id']}")
 
-    # ===== 判定 =====
+    # 判定
     if st.session_state.judged is None:
         if st.button("判定", use_container_width=True):
             if answer.strip() == "":
@@ -147,7 +140,7 @@ elif st.session_state.screen == "quiz":
                 st.session_state.judged = "wrong"
                 st.rerun()
 
-    # ===== 結果表示 & My単語 =====
+    # 結果表示 & My単語
     else:
         if st.session_state.judged == "correct":
             st.success(f"正解！ 答え：{q['en']}")
@@ -156,13 +149,6 @@ elif st.session_state.screen == "quiz":
 
         my = st.checkbox("⭐ My単語に追加", value=q["my"], key=f"my_{q['id']}")
         supabase.table("words").update({"my": my}).eq("id", q["id"]).execute()
-
-        # ===== 中断状態を保存 =====
-        supabase.table("user_progress").upsert({
-            "user_id": user_id,
-            "last_set": st.session_state.set_index,
-            "last_index": st.session_state.num
-        }).execute()
 
         if st.button("次へ", use_container_width=True):
             st.session_state.num += 1
