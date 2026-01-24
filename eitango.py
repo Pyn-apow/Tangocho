@@ -22,26 +22,18 @@ input {
 # =====================
 # 初期化
 # =====================
-if "screen" not in st.session_state:
-    st.session_state.screen = "title"
-
-if "set_index" not in st.session_state:
-    st.session_state.set_index = 0
-
-if "num" not in st.session_state:
-    st.session_state.num = 0
-
-if "judged" not in st.session_state:
-    st.session_state.judged = False
-
-if "question_indices" not in st.session_state:
-    st.session_state.question_indices = []
-
-if "question_count" not in st.session_state:
-    st.session_state.question_count = 10
-
-if "mode" not in st.session_state:
-    st.session_state.mode = "全単語"
+defaults = {
+    "screen": "title",
+    "set_index": 0,
+    "num": 0,
+    "judged": None,
+    "question_indices": [],
+    "question_count": 10,
+    "mode": "全単語"
+}
+for k, v in defaults.items():
+    if k not in st.session_state:
+        st.session_state[k] = v
 
 # =====================
 # CSV 読み込み
@@ -56,7 +48,7 @@ NUM_SETS = (TOTAL - 1) // SET_SIZE + 1
 # 学習度・習得率表示
 # =====================
 learned = (df["progression"] == 2).sum()
-progress_rate = learned / TOTAL if TOTAL > 0 else 0
+progress_rate = learned / TOTAL if TOTAL else 0
 
 st.sidebar.markdown("### 📊 学習状況")
 st.sidebar.progress(progress_rate)
@@ -83,22 +75,9 @@ elif st.session_state.screen == "select":
     st.title("📂 問題選択")
 
     with st.form("select_form"):
-        set_no = st.selectbox(
-            "セット（100語ごと）",
-            list(range(1, NUM_SETS + 1))
-        )
-
-        question_count = st.selectbox(
-            "問題数",
-            [5, 10, 20, 30],
-            index=1
-        )
-
-        mode = st.selectbox(
-            "出題範囲",
-            ["全単語", "未習得語", "my単語"]
-        )
-
+        set_no = st.selectbox("セット（100語ごと）", list(range(1, NUM_SETS + 1)))
+        question_count = st.selectbox("問題数", [5, 10, 20, 30], index=1)
+        mode = st.selectbox("出題範囲", ["全単語", "未習得語", "my単語"])
         start = st.form_submit_button("開始", use_container_width=True)
 
     if start:
@@ -106,11 +85,10 @@ elif st.session_state.screen == "select":
         st.session_state.question_count = question_count
         st.session_state.mode = mode
         st.session_state.num = 0
-        st.session_state.judged = False
+        st.session_state.judged = None
 
         start_row = st.session_state.set_index * SET_SIZE
         end_row = min(start_row + SET_SIZE, TOTAL)
-
         subset = df.iloc[start_row:end_row]
 
         if mode == "未習得語":
@@ -121,17 +99,17 @@ elif st.session_state.screen == "select":
         indices = subset.index.tolist()
 
         st.session_state.question_indices = random.sample(
-            indices,
-            k=min(question_count, len(indices))
+            indices, k=min(question_count, len(indices))
         )
 
         st.session_state.screen = "quiz"
         st.rerun()
 
 # =====================
-# 回答画面
+# 回答入力画面
 # =====================
 elif st.session_state.screen == "quiz":
+
     questions = st.session_state.question_indices
     num = st.session_state.num
 
@@ -154,58 +132,51 @@ elif st.session_state.screen == "quiz":
     st.write(f"ヒント：{en[0]}-")
 
     with st.form("quiz_form"):
-        answer = st.text_input(
-        "英語を入力してください",
-        key="answer_input"
-        )
+        answer = st.text_input("英語を入力してください", key="answer_input")
+        submit = st.form_submit_button("判定", use_container_width=True)
 
-
-        if not st.session_state.judged:
-            submit = st.form_submit_button("判定", use_container_width=True)
-            next_btn = False
-        else:
-            submit = False
-            next_btn = st.form_submit_button("次へ", use_container_width=True)
-
-    # ===== 判定 =====
     if submit:
         if answer.strip() == "":
             st.warning("英語を入力してください")
-        elif answer.lower() == en.lower():
-            if df.at[index, "progression"] < 2:
-                df.at[index, "progression"] += 1
-            df.to_csv(CSV_PATH, index=False)
+            st.stop()
+
+        if answer.lower() == en.lower():
+            df.at[index, "progression"] = min(2, df.at[index, "progression"] + 1)
             st.session_state.judged = "correct"
-            st.rerun()
         else:
             df.at[index, "progression"] = 0
-            df.to_csv(CSV_PATH, index=False)
             st.session_state.judged = "wrong"
-            st.rerun()
 
-    # ===== 結果表示 & My単語 =====
-    if st.session_state.judged:
-        if st.session_state.judged == "correct":
-            st.success(f"正解！ 答え：{en}")
-        else:
-            st.error(f"不正解… 答え：{en}")
-
-        my = st.checkbox(
-            "⭐ My単語に追加",
-            value=bool(df.at[index, "my"]),
-            key=f"my_{index}"
-        )
-
-        df.at[index, "my"] = 1 if my else 0
         df.to_csv(CSV_PATH, index=False)
 
-    # ===== 次へ =====
-    if next_btn:
-        st.session_state.num += 1
-        st.session_state.judged = False
-
-        # ★ 入力を完全に消す
-        st.session_state.pop("answer_input", None)
-
+        st.session_state.screen = "result"
         st.rerun()
 
+# =====================
+# 結果表示画面
+# =====================
+elif st.session_state.screen == "result":
+
+    index = st.session_state.question_indices[st.session_state.num]
+    en = str(df.at[index, "en"])
+
+    if st.session_state.judged == "correct":
+        st.success(f"正解！ 答え：{en}")
+    else:
+        st.error(f"不正解… 答え：{en}")
+
+    my = st.checkbox(
+        "⭐ My単語に追加",
+        value=bool(df.at[index, "my"]),
+        key=f"my_{index}"
+    )
+
+    df.at[index, "my"] = 1 if my else 0
+    df.to_csv(CSV_PATH, index=False)
+
+    if st.button("次へ", use_container_width=True):
+        st.session_state.num += 1
+        st.session_state.judged = None
+        st.session_state.pop("answer_input", None)
+        st.session_state.screen = "quiz"
+        st.rerun()
