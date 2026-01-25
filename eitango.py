@@ -16,11 +16,11 @@ if "screen" not in st.session_state:
         "question_count": 5,
         "mode": "全単語",
         "current_questions": [],
-        "user_answers": [],   # ユーザーの回答を保持
-        "user_my_flags": [],  # My単語チェックを保持
-        "questions_cache": {},  # セットキャッシュ
-        "progress_cache": None, # 総学習状況キャッシュ
-        "judged": None,        # 判定状態
+        "user_answers": [],
+        "user_my_flags": [],
+        "questions_cache": {},
+        "progress_cache": None,
+        "judged": None,
     })
 
 # ===================== 総単語数と学習率 =====================
@@ -57,30 +57,45 @@ if st.session_state.screen == "title":
 # ===================== 問題選択画面 =====================
 elif st.session_state.screen == "select":
     st.title("📂 問題選択")
+
+    # --- セット選択ボタン ---
     TOTAL_SETS = (total - 1) // 100 + 1
-    set_no = st.selectbox("セット（100語ごと）", list(range(1, TOTAL_SETS + 1)))
-    question_count = st.selectbox("問題数", [3,5,10,20], index=1)
-    mode = st.selectbox("出題範囲", ["全単語", "未習得語", "my単語"])
-    
+    st.write("### セットを選択")
+    for i in range(TOTAL_SETS):
+        if st.button(f"セット {i+1}", key=f"set_{i}"):
+            st.session_state.set_index = i
+
+    # --- 出題モード選択 ---
+    st.write("### 出題モード")
+    modes = ["全単語", "未習得語", "my単語"]
+    for m in modes:
+        if st.button(m, key=f"mode_{m}"):
+            st.session_state.mode = m
+
+    # --- 問題数選択 ---
+    st.write("### 問題数")
+    counts = [3,5,10,20]
+    for c in counts:
+        if st.button(str(c), key=f"count_{c}"):
+            st.session_state.question_count = c
+
+    # --- 開始ボタン ---
     if st.button("開始", use_container_width=True):
-        st.session_state.set_index = set_no - 1
-        st.session_state.question_count = question_count
-        st.session_state.mode = mode
         st.session_state.num = 0
         st.session_state.user_answers = []
         st.session_state.user_my_flags = []
 
         # キャッシュ確認
-        cache_key = f"set_{set_no}_{mode}"
+        cache_key = f"set_{st.session_state.set_index+1}_{st.session_state.mode}"
         if cache_key in st.session_state.questions_cache:
             questions_in_set = st.session_state.questions_cache[cache_key]
         else:
             start_id = st.session_state.set_index * 100
             end_id = start_id + 99
             query = supabase.table("words").select("id,jp,en,progression,my").gte("id", start_id).lte("id", end_id)
-            if mode == "未習得語":
+            if st.session_state.mode == "未習得語":
                 query = query.lt("progression", 2)
-            elif mode == "my単語":
+            elif st.session_state.mode == "my単語":
                 query = query.eq("my", True)
             res = query.execute()
             questions_in_set = res.data or []
@@ -91,7 +106,7 @@ elif st.session_state.screen == "select":
             st.stop()
 
         st.session_state.current_questions = random.sample(
-            questions_in_set, k=min(question_count, len(questions_in_set))
+            questions_in_set, k=min(st.session_state.question_count, len(questions_in_set))
         )
         st.session_state.screen = "quiz"
         st.rerun()
@@ -101,7 +116,7 @@ elif st.session_state.screen == "quiz":
     questions = st.session_state.current_questions
     n = st.session_state.num
 
-    # ----------------- 安全チェック -----------------
+    # 安全チェック
     if n >= len(questions):
         st.session_state.screen = "finish"
         st.rerun()
@@ -113,13 +128,13 @@ elif st.session_state.screen == "quiz":
     st.subheader(q["jp"])
     st.write(f"ヒント：{q['en'][0]}-")
 
-    # 判定前にリストを n+1 長にする（IndexError防止）
+    # 判定前にリストを n+1 長にする
     while len(st.session_state.user_answers) <= n:
         st.session_state.user_answers.append("")  
     while len(st.session_state.user_my_flags) <= n:
         st.session_state.user_my_flags.append(q["my"])  
 
-    # ----------------- フォーム -----------------
+    # フォーム
     with st.form(f"quiz_form_{q['id']}"):
         answer = st.text_input("英語を入力してください", value=st.session_state.user_answers[n])
         my = st.checkbox("⭐ My単語に追加", value=st.session_state.user_my_flags[n])
@@ -128,16 +143,10 @@ elif st.session_state.screen == "quiz":
         if submit:
             st.session_state.user_answers[n] = answer
             st.session_state.user_my_flags[n] = my
-
-            # 判定
-            if answer.lower() == q["en"].lower():
-                st.session_state.judged = "correct"
-            else:
-                st.session_state.judged = "wrong"
-
+            st.session_state.judged = "correct" if answer.lower() == q["en"].lower() else "wrong"
             st.rerun()
 
-    # ----------------- 判定後の表示 -----------------
+    # 判定後
     if st.session_state.judged is not None:
         if st.session_state.judged == "correct":
             st.success(f"正解！ 答え：{q['en']}")
@@ -155,9 +164,9 @@ elif st.session_state.screen == "finish":
     st.write("今回の結果まとめ：")
 
     questions = st.session_state.current_questions
-
     for i, (q, answer, my_flag) in enumerate(zip(questions, st.session_state.user_answers, st.session_state.user_my_flags)):
-        col1, col2, col3, col4 = st.columns([1, 2, 2, 1])
+        # 列比率を横画面向けに調整
+        col1, col2, col3, col4 = st.columns([0.5, 2.5, 2, 1])
 
         # 正誤
         with col1:
