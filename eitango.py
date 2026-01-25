@@ -11,8 +11,7 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 if "screen" not in st.session_state:
     st.session_state.update({
         "screen": "title",
-        "set_index": 0,
-        "num": 0,
+        "set_index": None,
         "question_count": 5,
         "mode": "全単語",
         "current_questions": [],
@@ -20,7 +19,9 @@ if "screen" not in st.session_state:
         "user_my_flags": [],
         "questions_cache": {},
         "progress_cache": None,
+        "num": 0,
         "judged": None,
+        "step": "select_set"  # セット選択か出題設定か
     })
 
 # ===================== 総単語数と学習率 =====================
@@ -29,7 +30,7 @@ if st.session_state.progress_cache is None:
     offset = 0
     limit = 1000
     while True:
-        res = supabase.table("words").select("progression").range(offset, offset+limit-1).execute()
+        res = supabase.table("words").select("progression").range(offset, offset + limit - 1).execute()
         data = res.data or []
         if not data:
             break
@@ -50,86 +51,88 @@ st.sidebar.write(f"習得済み：{learned} / {total} ({int(rate*100)}%)")
 # ===================== タイトル画面 =====================
 if st.session_state.screen == "title":
     st.title("📘 単語テスト")
-    if st.button("スタート", use_container_width=True, key="start"):
+    if st.button("スタート", use_container_width=True):
         st.session_state.screen = "select"
+        st.session_state.step = "select_set"
         st.rerun()
 
-# ===================== 問題選択画面 =====================
+# ===================== セット選択画面 =====================
 elif st.session_state.screen == "select":
     st.title("📂 問題選択")
+
     TOTAL_SETS = (total - 1) // 100 + 1
 
-    # セット選択ボタン横並び
-    sets_per_row = 5  # 一行に並べるボタン数
-    for i in range(0, TOTAL_SETS, sets_per_row):
-        row_sets = range(i, min(i + sets_per_row, TOTAL_SETS))
-        cols = st.columns(len(row_sets), gap="small")  # 行内のボタン
-        for j, set_idx in enumerate(row_sets):
-            label = f"セット {set_idx + 1}"
-            if st.session_state.set_index == set_idx:
-                label += " (選択中)"
-            if cols[j].button(label, key=f"set_{set_idx}"):
-                st.session_state.set_index = set_idx
+    if st.session_state.step == "select_set":
+        st.write("### セットを選択")
+        cols = st.columns(min(TOTAL_SETS, 4))  # 横に最大4列
+        for i in range(TOTAL_SETS):
+            col = cols[i % 4]
+            if col.button(f"{i+1}セット", key=f"set_{i}"):
+                st.session_state.set_index = i
+                st.session_state.step = "select_config"
                 st.rerun()
 
+    elif st.session_state.step == "select_config":
+        st.write(f"### セット {st.session_state.set_index+1} を選択しました")
 
-    # 出題形式ボタン横並び
-    modes = ["全単語", "未習得語", "my単語"]
-    cols = st.columns(len(modes))
-    for i, m in enumerate(modes):
-        label = m
-        if st.session_state.mode == m:
-            label += " (選択中)"
-        if cols[i].button(label, key=f"mode_{m}"):
-            st.session_state.mode = m
+        # 出題形式ボタン
+        st.write("#### 出題形式")
+        mode_options = ["全単語", "未習得語", "my単語"]
+        mode_cols = st.columns(len(mode_options))
+        for i, m in enumerate(mode_options):
+            label = m + (" (選択中)" if st.session_state.mode == m else "")
+            if mode_cols[i].button(label, key=f"mode_{m}"):
+                st.session_state.mode = m
+                st.rerun()  # 選択を即反映
+
+        # 問題数ボタン
+        st.write("#### 問題数")
+        count_options = [3,5,10,20]
+        count_cols = st.columns(len(count_options))
+        for i, c in enumerate(count_options):
+            label = str(c) + (" (選択中)" if st.session_state.question_count == c else "")
+            if count_cols[i].button(label, key=f"count_{c}"):
+                st.session_state.question_count = c
+                st.rerun()  # 選択を即反映
+
+        # 開始ボタン
+        if st.button("開始", use_container_width=True):
+            st.session_state.num = 0
+            st.session_state.user_answers = []
+            st.session_state.user_my_flags = []
+
+            # 問題取得（キャッシュ使用）
+            cache_key = f"set_{st.session_state.set_index+1}_{st.session_state.mode}"
+            if cache_key in st.session_state.questions_cache:
+                questions_in_set = st.session_state.questions_cache[cache_key]
+            else:
+                start_id = st.session_state.set_index * 100
+                end_id = start_id + 99
+                query = supabase.table("words").select("id,jp,en,progression,my").gte("id", start_id).lte("id", end_id)
+                if st.session_state.mode == "未習得語":
+                    query = query.lt("progression", 2)
+                elif st.session_state.mode == "my単語":
+                    query = query.eq("my", True)
+                res = query.execute()
+                questions_in_set = res.data or []
+                st.session_state.questions_cache[cache_key] = questions_in_set
+
+            if not questions_in_set:
+                st.warning("条件に合う単語がありません。")
+                st.stop()
+
+            st.session_state.current_questions = random.sample(
+                questions_in_set, k=min(st.session_state.question_count, len(questions_in_set))
+            )
+            st.session_state.screen = "quiz"
             st.rerun()
 
-    # 問題数ボタン横並び
-    counts = [3,5,10,20]
-    cols = st.columns(len(counts))
-    for i, c in enumerate(counts):
-        label = str(c)
-        if st.session_state.question_count == c:
-            label += " (選択中)"
-        if cols[i].button(label, key=f"count_{c}"):
-            st.session_state.question_count = c
-            st.rerun()
-
-    if st.button("開始", use_container_width=True, key="start_quiz"):
-        st.session_state.num = 0
-        st.session_state.user_answers = []
-        st.session_state.user_my_flags = []
-
-        # 問題取得
-        cache_key = f"set_{st.session_state.set_index+1}_{st.session_state.mode}"
-        if cache_key in st.session_state.questions_cache:
-            questions_in_set = st.session_state.questions_cache[cache_key]
-        else:
-            start_id = st.session_state.set_index * 100
-            end_id = start_id + 99
-            query = supabase.table("words").select("id,jp,en,progression,my").gte("id", start_id).lte("id", end_id)
-            if st.session_state.mode == "未習得語":
-                query = query.lt("progression", 2)
-            elif st.session_state.mode == "my単語":
-                query = query.eq("my", True)
-            res = query.execute()
-            questions_in_set = res.data or []
-            st.session_state.questions_cache[cache_key] = questions_in_set
-
-        if not questions_in_set:
-            st.warning("条件に合う単語がありません。")
-            st.stop()
-
-        st.session_state.current_questions = random.sample(
-            questions_in_set, k=min(st.session_state.question_count, len(questions_in_set))
-        )
-        st.session_state.screen = "quiz"
-        st.rerun()
 
 # ===================== クイズ画面 =====================
 elif st.session_state.screen == "quiz":
     questions = st.session_state.current_questions
     n = st.session_state.num
+
     if n >= len(questions):
         st.session_state.screen = "finish"
         st.rerun()
@@ -140,64 +143,29 @@ elif st.session_state.screen == "quiz":
     st.subheader(q["jp"])
     st.write(f"ヒント：{q['en'][0]}-")
 
-    # 判定前にリストを n+1 長にする
     while len(st.session_state.user_answers) <= n:
         st.session_state.user_answers.append("")
     while len(st.session_state.user_my_flags) <= n:
         st.session_state.user_my_flags.append(q["my"])
 
-    # ----------------- フォーム -----------------
     with st.form(f"quiz_form_{q['id']}"):
-        # もとのテキスト入力（PC対応）
         answer = st.text_input("英語を入力してください", value=st.session_state.user_answers[n])
         my = st.checkbox("⭐ My単語に追加", value=st.session_state.user_my_flags[n])
         submit = st.form_submit_button("判定")
 
         if submit:
-            st.session_state.user_answers[n] = answer.lower()
+            st.session_state.user_answers[n] = answer
             st.session_state.user_my_flags[n] = my
             st.session_state.judged = "correct" if answer.lower() == q["en"].lower() else "wrong"
             st.rerun()
 
-    # ===================== キーボード用 CSS =====================
-    st.markdown("""
-    <style>
-    div.stButton > button {
-        height: 60px;        /* ボタンの高さ */
-        font-size: 20px;     /* 文字サイズ */
-        padding: 0px 5px;    /* ボタン内の横余白 */
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-    # ===================== 横並びキーボードボタン =====================
-    # QWERTYキーボード例（スマホ横向き想定）
-    qwerty_rows = ["qwerty", "asdfgh", "zxcvbnm"]
-
-    for row_idx, row in enumerate(qwerty_rows):
-        cols = st.columns(len(row), gap="small")
-        for i, letter in enumerate(row):
-            if cols[i].button(letter, key=f"kb_{row_idx}_{letter}"):
-                st.session_state.user_answers[n] += letter
-
-    # スペースと削除
-    spc_cols = st.columns([4,1,4], gap="small")
-    if spc_cols[0].button("space", key=f"space_{n}"):
-        st.session_state.user_answers[n] += " "
-    if spc_cols[1].button("⌫", key=f"del_{n}"):
-        st.session_state.user_answers[n] = st.session_state.user_answers[n][:-1]
-
-
-
-
-    # ----------------- 判定後の表示 -----------------
     if st.session_state.judged is not None:
-        if st.session_state.judged=="correct":
+        if st.session_state.judged == "correct":
             st.success(f"正解！ 答え：{q['en']}")
         else:
             st.error(f"不正解… 答え：{q['en']} (あなたの答え: {st.session_state.user_answers[n]}) )")
 
-        if st.button("次へ", use_container_width=True, key=f"next_{n}"):
+        if st.button("次へ", use_container_width=True):
             st.session_state.num += 1
             st.session_state.judged = None
             st.rerun()
@@ -208,14 +176,16 @@ elif st.session_state.screen == "finish":
     st.write("今回の結果まとめ：")
 
     questions = st.session_state.current_questions
-
     for i, (q, answer, my_flag) in enumerate(zip(questions, st.session_state.user_answers, st.session_state.user_my_flags)):
-        col1, col2, col3, col4 = st.columns([1,2,2,1])
-        with col1: st.markdown("✅" if answer==q["en"].lower() else "❌")
-        with col2: st.write(q["jp"])
+        col1, col2, col3, col4 = st.columns([0.5, 2.5, 2, 1])
+        with col1:
+            st.markdown("✅" if answer.lower() == q["en"].lower() else "❌")
+        with col2:
+            st.write(q["jp"])
         with col3:
-            new_prog = min(q["progression"]+1,2) if answer==q["en"].lower() else 0
-            st.progress(0.5 if new_prog==1 else 1.0 if new_prog==2 else 0.0)
+            new_prog = min(q["progression"] + 1, 2) if answer.lower() == q["en"].lower() else 0
+            progress_rate = 0.5 if new_prog == 1 else 1.0 if new_prog == 2 else 0.0
+            st.progress(progress_rate)
         with col4:
             my = st.checkbox("⭐", value=my_flag, key=f"my_finish_{q['id']}")
             st.session_state.user_my_flags[i] = my
@@ -223,9 +193,12 @@ elif st.session_state.screen == "finish":
     if st.button("DBに反映して問題選択へ戻る", use_container_width=True):
         updates = []
         for q, answer, my_flag in zip(questions, st.session_state.user_answers, st.session_state.user_my_flags):
-            new_prog = min(q["progression"]+1,2) if answer==q["en"].lower() else 0
-            updates.append({"id":q["id"], "progression":new_prog, "my":my_flag})
+            new_prog = min(q["progression"] + 1, 2) if answer.lower() == q["en"].lower() else 0
+            updates.append({"id": q["id"], "progression": new_prog, "my": my_flag})
+
         for u in updates:
-            supabase.table("words").update({"progression":u["progression"],"my":u["my"]}).eq("id",u["id"]).execute()
+            supabase.table("words").update({"progression": u["progression"], "my": u["my"]}).eq("id", u["id"]).execute()
+
         st.session_state.screen = "select"
+        st.session_state.step = "select_set"
         st.rerun()
