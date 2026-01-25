@@ -54,17 +54,16 @@ if st.session_state.screen == "title":
 # ===================== セット選択画面 =====================
 elif st.session_state.screen == "select":
     st.title("📂 セット選択")
-
     TOTAL_SETS = (total - 1) // 100 + 1
-    cols = st.columns(TOTAL_SETS)
+    cols = st.columns(min(TOTAL_SETS, 5))
     for i in range(TOTAL_SETS):
-        label = f"{i+1}"
-        if cols[i].button(label, key=f"set_{i}"):
+        col = cols[i % len(cols)]
+        if col.button(f"{i+1}", key=f"set_{i}"):
             st.session_state.set_index = i
             st.session_state.screen = "config"
             st.rerun()
 
-# ===================== 出題形式・問題数選択 =====================
+# ===================== 出題形式・問題数選択画面 =====================
 elif st.session_state.screen == "config":
     st.title("🛠 出題形式・問題数選択")
 
@@ -148,10 +147,10 @@ elif st.session_state.screen == "quiz":
             st.session_state.judged = "correct" if answer.lower() == q["en"].lower() else "wrong"
             st.rerun()
 
-    # QWERTYキーボード（スマホ横向き）
+    # QWERTYキーボード（スマホ横向き、押しやすく）
     qwerty_rows = [
-        list("qwertyuiop"),
-        list("asdfghjkl"),
+        list("qwerty"),
+        list("asdfgh"),
         list("zxcvbnm")
     ]
     for row in qwerty_rows:
@@ -160,6 +159,7 @@ elif st.session_state.screen == "quiz":
             if cols[i].button(letter, key=f"btn_{q['id']}_{letter}"):
                 st.session_state.user_answers[n] += letter
                 st.experimental_rerun()
+
     # スペース・削除・Enter
     spc_cols = st.columns(3)
     if spc_cols[0].button("space", key=f"space_{q['id']}"):
