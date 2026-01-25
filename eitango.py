@@ -172,20 +172,21 @@ elif st.session_state.screen == "quiz":
 
     # ===================== 横並びキーボードボタン =====================
     # QWERTYキーボード例（スマホ横向き想定）
-    qwerty_rows = ["qwerty","asdfgh","zxcvbnm"]
+    qwerty_rows = ["qwerty", "asdfgh", "zxcvbnm"]
 
-    for row in qwerty_rows:
-        n_cols = min(len(row), 7)  # 一行に最大7個まで
-        cols = st.columns(n_cols, gap="small")
+    for row_idx, row in enumerate(qwerty_rows):
+        cols = st.columns(len(row), gap="small")
         for i, letter in enumerate(row):
-            col = cols[i % n_cols]  # 複数段になる場合も対応
-            if col.button(letter, key=f"btn_{q['id']}_{letter}"):
+            if cols[i].button(letter, key=f"kb_{row_idx}_{letter}"):
                 st.session_state.user_answers[n] += letter
 
-    # スペース・削除
-    spc_cols = st.columns([2,1,2], gap="small")
-    if spc_cols[0].button("space", key=f"space_{q['id']}"): st.session_state.user_answers[n] += " "
-    if spc_cols[1].button("⌫", key=f"del_{q['id']}"): st.session_state.user_answers[n] = st.session_state.user_answers[n][:-1]
+    # スペースと削除
+    spc_cols = st.columns([4,1,4], gap="small")
+    if spc_cols[0].button("space", key=f"space_{n}"):
+        st.session_state.user_answers[n] += " "
+    if spc_cols[1].button("⌫", key=f"del_{n}"):
+        st.session_state.user_answers[n] = st.session_state.user_answers[n][:-1]
+
 
 
 
