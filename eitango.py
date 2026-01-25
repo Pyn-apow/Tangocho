@@ -80,16 +80,20 @@ elif st.session_state.screen == "select":
         mode_options = ["全単語", "未習得語", "my単語"]
         mode_cols = st.columns(len(mode_options))
         for i, m in enumerate(mode_options):
-            if mode_cols[i].button(m, key=f"mode_{m}"):
+            label = m + (" (選択中)" if st.session_state.mode == m else "")
+            if mode_cols[i].button(label, key=f"mode_{m}"):
                 st.session_state.mode = m
+                st.rerun()  # 選択を即反映
 
         # 問題数ボタン
         st.write("#### 問題数")
         count_options = [3,5,10,20]
         count_cols = st.columns(len(count_options))
         for i, c in enumerate(count_options):
-            if count_cols[i].button(str(c), key=f"count_{c}"):
+            label = str(c) + (" (選択中)" if st.session_state.question_count == c else "")
+            if count_cols[i].button(label, key=f"count_{c}"):
                 st.session_state.question_count = c
+                st.rerun()  # 選択を即反映
 
         # 開始ボタン
         if st.button("開始", use_container_width=True):
@@ -122,6 +126,7 @@ elif st.session_state.screen == "select":
             )
             st.session_state.screen = "quiz"
             st.rerun()
+
 
 # ===================== クイズ画面 =====================
 elif st.session_state.screen == "quiz":
