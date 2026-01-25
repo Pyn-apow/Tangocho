@@ -60,14 +60,18 @@ elif st.session_state.screen == "select":
     TOTAL_SETS = (total - 1) // 100 + 1
 
     # セット選択ボタン横並び
-    cols = st.columns(TOTAL_SETS)
-    for i in range(TOTAL_SETS):
-        label = f"セット {i+1}"
-        if st.session_state.set_index == i:
-            label += " (選択中)"
-        if cols[i].button(label, key=f"set_{i}"):
-            st.session_state.set_index = i
-            st.rerun()
+    sets_per_row = 5  # 一行に並べるボタン数
+    for i in range(0, TOTAL_SETS, sets_per_row):
+        row_sets = range(i, min(i + sets_per_row, TOTAL_SETS))
+        cols = st.columns(len(row_sets), gap="small")  # 行内のボタン
+        for j, set_idx in enumerate(row_sets):
+            label = f"セット {set_idx + 1}"
+            if st.session_state.set_index == set_idx:
+                label += " (選択中)"
+            if cols[j].button(label, key=f"set_{set_idx}"):
+                st.session_state.set_index = set_idx
+                st.rerun()
+
 
     # 出題形式ボタン横並び
     modes = ["全単語", "未習得語", "my単語"]
@@ -167,19 +171,22 @@ elif st.session_state.screen == "quiz":
     """, unsafe_allow_html=True)
 
     # ===================== 横並びキーボードボタン =====================
+    # QWERTYキーボード例（スマホ横向き想定）
     qwerty_rows = ["qwerty","asdfgh","zxcvbnm"]
+
     for row in qwerty_rows:
-        cols = st.columns(len(row), gap="small")  # ボタン間の余白を最小化
+        n_cols = min(len(row), 7)  # 一行に最大7個まで
+        cols = st.columns(n_cols, gap="small")
         for i, letter in enumerate(row):
-            if cols[i].button(letter, key=f"btn_{q['id']}_{letter}"):
+            col = cols[i % n_cols]  # 複数段になる場合も対応
+            if col.button(letter, key=f"btn_{q['id']}_{letter}"):
                 st.session_state.user_answers[n] += letter
 
-    # ===================== スペース・削除ボタン =====================
-    spc_cols = st.columns([1,1,1], gap="small")
-    if spc_cols[0].button("space", key=f"space_{q['id']}"):
-        st.session_state.user_answers[n] += " "
-    if spc_cols[1].button("⌫", key=f"del_{q['id']}"):
-        st.session_state.user_answers[n] = st.session_state.user_answers[n][:-1]
+    # スペース・削除
+    spc_cols = st.columns([2,1,2], gap="small")
+    if spc_cols[0].button("space", key=f"space_{q['id']}"): st.session_state.user_answers[n] += " "
+    if spc_cols[1].button("⌫", key=f"del_{q['id']}"): st.session_state.user_answers[n] = st.session_state.user_answers[n][:-1]
+
 
 
     # ----------------- 判定後の表示 -----------------
