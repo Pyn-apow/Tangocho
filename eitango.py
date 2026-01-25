@@ -53,7 +53,7 @@ if st.session_state.screen == "title":
     st.title("📘 単語テスト")
     if st.button("スタート", use_container_width=True):
         st.session_state.screen = "select"
-        st.experimental_rerun()
+        st.rerun()
 
 # ===================== セット選択画面 =====================
 elif st.session_state.screen == "select":
@@ -121,7 +121,7 @@ elif st.session_state.screen == "select":
             questions_in_set, k=min(st.session_state.question_count, len(questions_in_set))
         )
         st.session_state.screen = "quiz"
-        st.experimental_rerun()
+        st.rerun()
 
 # ===================== クイズ画面 =====================
 elif st.session_state.screen == "quiz":
@@ -130,7 +130,7 @@ elif st.session_state.screen == "quiz":
 
     if n >= len(questions):
         st.session_state.screen = "finish"
-        st.experimental_rerun()
+        st.rerun()
 
     q = questions[n]
 
@@ -167,7 +167,7 @@ elif st.session_state.screen == "quiz":
             st.session_state.judged = "correct"
         else:
             st.session_state.judged = "wrong"
-        st.experimental_rerun()
+        st.rerun()
 
     if st.session_state.judged is not None:
         if st.session_state.judged == "correct":
@@ -178,7 +178,7 @@ elif st.session_state.screen == "quiz":
         if st.button("次へ", use_container_width=True):
             st.session_state.num += 1
             st.session_state.judged = None
-            st.experimental_rerun()
+            st.rerun()
 
 # ===================== セット終了画面 =====================
 elif st.session_state.screen == "finish":
@@ -207,4 +207,4 @@ elif st.session_state.screen == "finish":
         for u in updates:
             supabase.table("words").update({"progression": u["progression"], "my": u["my"]}).eq("id", u["id"]).execute()
         st.session_state.screen = "select"
-        st.experimental_rerun()
+        st.rerun()
