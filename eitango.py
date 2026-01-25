@@ -29,7 +29,7 @@ if st.session_state.progress_cache is None:
     offset = 0
     limit = 1000
     while True:
-        res = supabase.table("words").select("progression").range(offset, offset + limit - 1).execute()
+        res = supabase.table("words").select("progression").range(offset, offset+limit-1).execute()
         data = res.data or []
         if not data:
             break
@@ -50,7 +50,7 @@ st.sidebar.write(f"習得済み：{learned} / {total} ({int(rate*100)}%)")
 # ===================== タイトル画面 =====================
 if st.session_state.screen == "title":
     st.title("📘 単語テスト")
-    if st.button("スタート", key="start_button", use_container_width=True):
+    if st.button("スタート", use_container_width=True, key="start"):
         st.session_state.screen = "select"
         st.rerun()
 
@@ -59,41 +59,44 @@ elif st.session_state.screen == "select":
     st.title("📂 問題選択")
     TOTAL_SETS = (total - 1) // 100 + 1
 
-    st.write("### セット選択")
-    set_cols = st.columns(min(TOTAL_SETS, 5))
+    # セット選択ボタン横並び
+    cols = st.columns(TOTAL_SETS)
     for i in range(TOTAL_SETS):
-        lbl = f"{i+1}セット"
-        if i == st.session_state.set_index:
-            lbl += " (選択中)"
-        if set_cols[i % len(set_cols)].button(lbl, key=f"set_{i}"):
+        label = f"セット {i+1}"
+        if st.session_state.set_index == i:
+            label += " (選択中)"
+        if cols[i].button(label, key=f"set_{i}"):
             st.session_state.set_index = i
+            st.rerun()
 
-    st.write("### 出題形式選択")
+    # 出題形式ボタン横並び
     modes = ["全単語", "未習得語", "my単語"]
-    mode_cols = st.columns(len(modes))
-    for m, mode_label in enumerate(modes):
-        lbl = mode_label
-        if mode_label == st.session_state.mode:
-            lbl += " (選択中)"
-        if mode_cols[m].button(lbl, key=f"mode_{m}"):
-            st.session_state.mode = mode_label
+    cols = st.columns(len(modes))
+    for i, m in enumerate(modes):
+        label = m
+        if st.session_state.mode == m:
+            label += " (選択中)"
+        if cols[i].button(label, key=f"mode_{m}"):
+            st.session_state.mode = m
+            st.rerun()
 
-    st.write("### 問題数選択")
-    counts = [3, 5, 10, 20]
-    count_cols = st.columns(len(counts))
-    for c, count in enumerate(counts):
-        lbl = str(count)
-        if count == st.session_state.question_count:
-            lbl += " (選択中)"
-        if count_cols[c].button(lbl, key=f"count_{c}"):
-            st.session_state.question_count = count
+    # 問題数ボタン横並び
+    counts = [3,5,10,20]
+    cols = st.columns(len(counts))
+    for i, c in enumerate(counts):
+        label = str(c)
+        if st.session_state.question_count == c:
+            label += " (選択中)"
+        if cols[i].button(label, key=f"count_{c}"):
+            st.session_state.question_count = c
+            st.rerun()
 
-    if st.button("開始", key="start_quiz"):
+    if st.button("開始", use_container_width=True, key="start_quiz"):
         st.session_state.num = 0
         st.session_state.user_answers = []
         st.session_state.user_my_flags = []
 
-        # キャッシュ確認
+        # 問題取得
         cache_key = f"set_{st.session_state.set_index+1}_{st.session_state.mode}"
         if cache_key in st.session_state.questions_cache:
             questions_in_set = st.session_state.questions_cache[cache_key]
@@ -123,7 +126,6 @@ elif st.session_state.screen == "select":
 elif st.session_state.screen == "quiz":
     questions = st.session_state.current_questions
     n = st.session_state.num
-
     if n >= len(questions):
         st.session_state.screen = "finish"
         st.rerun()
@@ -136,30 +138,52 @@ elif st.session_state.screen == "quiz":
 
     # 判定前にリストを n+1 長にする
     while len(st.session_state.user_answers) <= n:
-        st.session_state.user_answers.append("")  
+        st.session_state.user_answers.append("")
     while len(st.session_state.user_my_flags) <= n:
-        st.session_state.user_my_flags.append(q["my"])  
+        st.session_state.user_my_flags.append(q["my"])
 
     # ----------------- フォーム -----------------
     with st.form(f"quiz_form_{q['id']}"):
-        answer = st.text_input("英語を入力してください", value=st.session_state.user_answers[n], key=f"input_{q['id']}")
-        my = st.checkbox("⭐ my単語に追加", value=st.session_state.user_my_flags[n], key=f"my_input_{q['id']}")
-        submit = st.form_submit_button("判定", key=f"submit_{q['id']}")
+        # もとのテキスト入力（PC対応）
+        answer = st.text_input("英語を入力してください", value=st.session_state.user_answers[n])
+        my = st.checkbox("⭐ My単語に追加", value=st.session_state.user_my_flags[n])
+        submit = st.form_submit_button("判定")
 
         if submit:
-            st.session_state.user_answers[n] = answer
+            st.session_state.user_answers[n] = answer.lower()
             st.session_state.user_my_flags[n] = my
             st.session_state.judged = "correct" if answer.lower() == q["en"].lower() else "wrong"
             st.rerun()
 
-    # 判定後の表示
+    # ----------------- QWERTYキーボード -----------------
+    qwerty_rows = [
+        list("qwertyuiop"),
+        list("asdfghjkl"),
+        list("zxcvbnm"),
+        ["space", "back"]
+    ]
+
+    for row in qwerty_rows:
+        cols = st.columns(len(row))
+        for i, key in enumerate(row):
+            btn_label = "␣" if key=="space" else "⌫" if key=="back" else key
+            if cols[i].button(btn_label, key=f"kb_{key}_{n}"):
+                if key=="back":
+                    st.session_state.user_answers[n] = st.session_state.user_answers[n][:-1]
+                elif key=="space":
+                    st.session_state.user_answers[n] += " "
+                else:
+                    st.session_state.user_answers[n] += key
+                st.rerun()
+
+    # ----------------- 判定後の表示 -----------------
     if st.session_state.judged is not None:
-        if st.session_state.judged == "correct":
+        if st.session_state.judged=="correct":
             st.success(f"正解！ 答え：{q['en']}")
         else:
             st.error(f"不正解… 答え：{q['en']} (あなたの答え: {st.session_state.user_answers[n]}) )")
 
-        if st.button("次へ", key=f"next_{n}"):
+        if st.button("次へ", use_container_width=True, key=f"next_{n}"):
             st.session_state.num += 1
             st.session_state.judged = None
             st.rerun()
@@ -170,28 +194,24 @@ elif st.session_state.screen == "finish":
     st.write("今回の結果まとめ：")
 
     questions = st.session_state.current_questions
+
     for i, (q, answer, my_flag) in enumerate(zip(questions, st.session_state.user_answers, st.session_state.user_my_flags)):
         col1, col2, col3, col4 = st.columns([1,2,2,1])
-        with col1:
-            st.markdown("✅" if answer.lower() == q["en"].lower() else "❌")
-        with col2:
-            st.write(q["jp"])
+        with col1: st.markdown("✅" if answer==q["en"].lower() else "❌")
+        with col2: st.write(q["jp"])
         with col3:
-            new_prog = min(q["progression"] + 1, 2) if answer.lower() == q["en"].lower() else 0
-            progress_rate = 0.5 if new_prog == 1 else 1.0 if new_prog == 2 else 0.0
-            st.progress(progress_rate)
+            new_prog = min(q["progression"]+1,2) if answer==q["en"].lower() else 0
+            st.progress(0.5 if new_prog==1 else 1.0 if new_prog==2 else 0.0)
         with col4:
             my = st.checkbox("⭐", value=my_flag, key=f"my_finish_{q['id']}")
             st.session_state.user_my_flags[i] = my
 
-    if st.button("DBに反映して問題選択へ戻る", key="finish_back"):
+    if st.button("DBに反映して問題選択へ戻る", use_container_width=True):
         updates = []
         for q, answer, my_flag in zip(questions, st.session_state.user_answers, st.session_state.user_my_flags):
-            new_prog = min(q["progression"] + 1, 2) if answer.lower() == q["en"].lower() else 0
-            updates.append({"id": q["id"], "progression": new_prog, "my": my_flag})
-
+            new_prog = min(q["progression"]+1,2) if answer==q["en"].lower() else 0
+            updates.append({"id":q["id"], "progression":new_prog, "my":my_flag})
         for u in updates:
-            supabase.table("words").update({"progression": u["progression"], "my": u["my"]}).eq("id", u["id"]).execute()
-
+            supabase.table("words").update({"progression":u["progression"],"my":u["my"]}).eq("id",u["id"]).execute()
         st.session_state.screen = "select"
         st.rerun()
