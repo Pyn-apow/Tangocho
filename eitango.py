@@ -25,6 +25,8 @@ if "screen" not in st.session_state:
         "judged": None,
         "step": "select_set"  # セット選択か出題設定か
     })
+if "card_results" not in st.session_state:
+    st.session_state.card_results = []
 
 # ===================== 総単語数と学習率 =====================
 if st.session_state.progress_cache is None:
@@ -202,7 +204,7 @@ elif st.session_state.screen == "card":
     st.title("📖 英日単語帳")
     st.write(f"{n+1} / {len(questions)}")
 
-    # --- カード表示 ---
+    # 表示（反転）
     card_text = q["jp"] if st.session_state.card_flipped else q["en"]
 
     if st.button(card_text, use_container_width=True):
@@ -210,68 +212,68 @@ elif st.session_state.screen == "card":
         st.rerun()
 
     st.markdown("※ タップで反転")
-
     st.divider()
 
-    # --- 判定ボタン ---
     col1, col2 = st.columns(2)
 
+    # ❌ 不正解
     with col1:
         if st.button("❌ 不正解", use_container_width=True):
-            # 英日用 progression（十の位）
-            new_prog = (q["progression"] // 10) * 10
-            supabase.table("words").update({
-                "progression": new_prog
-            }).eq("id", q["id"]).execute()
-
+            st.session_state.card_results.append(0)
             st.session_state.num += 1
             st.session_state.card_flipped = False
             st.rerun()
 
+    # ⭕ 正解
     with col2:
         if st.button("⭕ 正解", use_container_width=True):
-            prog = q["progression"] // 10
-            prog = min(prog + 1, 2)
-            new_prog = prog * 10 + (q["progression"] % 10)
-
-            supabase.table("words").update({
-                "progression": new_prog
-            }).eq("id", q["id"]).execute()
-
+            st.session_state.card_results.append(1)
             st.session_state.num += 1
             st.session_state.card_flipped = False
             st.rerun()
+
 
 
 # ===================== セット終了画面 =====================
 elif st.session_state.screen == "finish":
     st.success("🎉 このセットは終了！")
-    st.write("今回の結果まとめ：")
 
     questions = st.session_state.current_questions
-    for i, (q, answer, my_flag) in enumerate(zip(questions, st.session_state.user_answers, st.session_state.user_my_flags)):
-        col1, col2, col3, col4 = st.columns([0.5, 2.5, 2, 1])
-        with col1:
-            st.markdown("✅" if answer.lower() == q["en"].lower() else "❌")
-        with col2:
-            st.write(q["jp"])
-        with col3:
-            new_prog = min(q["progression"] + 1, 2) if answer.lower() == q["en"].lower() else 0
-            progress_rate = 0.5 if new_prog == 1 else 1.0 if new_prog == 2 else 0.0
-            st.progress(progress_rate)
-        with col4:
-            my = st.checkbox("⭐", value=my_flag, key=f"my_finish_{q['id']}")
-            st.session_state.user_my_flags[i] = my
 
-    if st.button("DBに反映して問題選択へ戻る", use_container_width=True):
-        updates = []
-        for q, answer, my_flag in zip(questions, st.session_state.user_answers, st.session_state.user_my_flags):
-            new_prog = min(q["progression"] + 1, 2) if answer.lower() == q["en"].lower() else 0
-            updates.append({"id": q["id"], "progression": new_prog, "my": my_flag})
+    # ===== 英日単語帳 =====
+    if st.session_state.study_mode == "英日単語帳":
+        for q, result in zip(questions, st.session_state.card_results):
+            # 一の位（英日）
+            prog_enjp = q["progression"] % 10
+            prog_enjp = min(prog_enjp + 1, 2) if result == 1 else 0
 
-        for u in updates:
-            supabase.table("words").update({"progression": u["progression"], "my": u["my"]}).eq("id", u["id"]).execute()
+            new_prog = (q["progression"] // 10) * 10 + prog_enjp
 
+            supabase.table("words").update({
+                "progression": new_prog
+            }).eq("id", q["id"]).execute()
+
+    # ===== 日英クイズ =====
+    else:
+        for q, answer, my_flag in zip(
+            questions,
+            st.session_state.user_answers,
+            st.session_state.user_my_flags
+        ):
+            # 十の位（日英）
+            prog_jpen = q["progression"] // 10
+            prog_jpen = min(prog_jpen + 1, 2) if answer.lower() == q["en"].lower() else 0
+
+            new_prog = prog_jpen * 10 + (q["progression"] % 10)
+
+            supabase.table("words").update({
+                "progression": new_prog,
+                "my": my_flag
+            }).eq("id", q["id"]).execute()
+
+    if st.button("問題選択へ戻る", use_container_width=True):
         st.session_state.screen = "select"
         st.session_state.step = "select_set"
+        st.session_state.card_results = []
         st.rerun()
+
