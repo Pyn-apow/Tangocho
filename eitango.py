@@ -78,17 +78,17 @@ elif st.session_state.screen == "select":
         st.write(f"### セット {st.session_state.set_index+1} を選択しました")
 
         st.write("#### 学習モード")
-    study_modes = ["日英クイズ", "英日単語帳"]
-    study_cols = st.columns(len(study_modes))
-    for i, sm in enumerate(study_modes):
-        label = sm + (" (選択中)" if st.session_state.study_mode == sm else "")
-        if study_cols[i].button(label, key=f"study_{sm}"):
-            st.session_state.study_mode = sm
-            st.rerun()
+        study_modes = ["日英クイズ", "英日単語帳"]
+        study_cols = st.columns(len(study_modes))
+        for i, sm in enumerate(study_modes):
+            label = sm + (" (選択中)" if st.session_state.study_mode == sm else "")
+            if study_cols[i].button(label, key=f"study_{sm}"):
+                st.session_state.study_mode = sm
+                st.rerun()
             
         # 出題形式ボタン
         st.write("#### 出題形式")
-        mode_options = ["全単語", "未習得語", "my単語"]
+        mode_options = ["全語", "未習得語", "my単語"]
         mode_cols = st.columns(len(mode_options))
         for i, m in enumerate(mode_options):
             label = m + (" (選択中)" if st.session_state.mode == m else "")
