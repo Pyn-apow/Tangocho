@@ -14,7 +14,7 @@ if "screen" not in st.session_state:
         "set_index": None,
         "study_mode": "日英クイズ",
         "question_count": 5,
-        "mode": "全単語",
+        "mode": "",
         "current_questions": [],
         "user_answers": [],
         "user_my_flags": [],
@@ -88,7 +88,7 @@ elif st.session_state.screen == "select":
             
         # 出題形式ボタン
         st.write("#### 出題形式")
-        mode_options = ["全語", "未習得語", "my単語"]
+        mode_options = ["全単語", "未習得語", "my単語"]
         mode_cols = st.columns(len(mode_options))
         for i, m in enumerate(mode_options):
             label = m + (" (選択中)" if st.session_state.mode == m else "")
