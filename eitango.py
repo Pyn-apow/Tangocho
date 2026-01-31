@@ -12,6 +12,7 @@ if "screen" not in st.session_state:
     st.session_state.update({
         "screen": "title",
         "set_index": None,
+        "study_mode": "日英クイズ",
         "question_count": 5,
         "mode": "全単語",
         "current_questions": [],
@@ -20,6 +21,7 @@ if "screen" not in st.session_state:
         "questions_cache": {},
         "progress_cache": None,
         "num": 0,
+        "card_flipped": False,   # 単語カードが裏返っているか
         "judged": None,
         "step": "select_set"  # セット選択か出題設定か
     })
@@ -50,7 +52,7 @@ st.sidebar.write(f"習得済み：{learned} / {total} ({int(rate*100)}%)")
 
 # ===================== タイトル画面 =====================
 if st.session_state.screen == "title":
-    st.title("📘 単語テスト")
+    st.title("📘 英検準1級単語")
     if st.button("スタート", use_container_width=True):
         st.session_state.screen = "select"
         st.session_state.step = "select_set"
@@ -75,6 +77,15 @@ elif st.session_state.screen == "select":
     elif st.session_state.step == "select_config":
         st.write(f"### セット {st.session_state.set_index+1} を選択しました")
 
+        st.write("#### 学習モード")
+    study_modes = ["日英クイズ", "英日単語帳"]
+    study_cols = st.columns(len(study_modes))
+    for i, sm in enumerate(study_modes):
+        label = sm + (" (選択中)" if st.session_state.study_mode == sm else "")
+        if study_cols[i].button(label, key=f"study_{sm}"):
+            st.session_state.study_mode = sm
+            st.rerun()
+            
         # 出題形式ボタン
         st.write("#### 出題形式")
         mode_options = ["全単語", "未習得語", "my単語"]
@@ -124,7 +135,10 @@ elif st.session_state.screen == "select":
             st.session_state.current_questions = random.sample(
                 questions_in_set, k=min(st.session_state.question_count, len(questions_in_set))
             )
-            st.session_state.screen = "quiz"
+            if st.session_state.study_mode == "英日単語帳":
+                st.session_state.screen = "card"   # 単語帳
+            else:
+                st.session_state.screen = "quiz"   # 日英クイズ
             st.rerun()
 
 
@@ -169,6 +183,61 @@ elif st.session_state.screen == "quiz":
             st.session_state.num += 1
             st.session_state.judged = None
             st.rerun()
+
+# ===================== 英日単語帳画面 =====================
+elif st.session_state.screen == "card":
+    questions = st.session_state.current_questions
+    n = st.session_state.num
+
+    if n >= len(questions):
+        st.session_state.screen = "finish"
+        st.rerun()
+
+    q = questions[n]
+
+    st.title("📖 英日単語帳")
+    st.write(f"{n+1} / {len(questions)}")
+
+    # --- カード表示 ---
+    card_text = q["jp"] if st.session_state.card_flipped else q["en"]
+
+    if st.button(card_text, use_container_width=True):
+        st.session_state.card_flipped = not st.session_state.card_flipped
+        st.rerun()
+
+    st.markdown("※ タップで反転")
+
+    st.divider()
+
+    # --- 判定ボタン ---
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if st.button("❌ 不正解", use_container_width=True):
+            # 英日用 progression（十の位）
+            new_prog = (q["progression"] // 10) * 10
+            supabase.table("words").update({
+                "progression": new_prog
+            }).eq("id", q["id"]).execute()
+
+            st.session_state.num += 1
+            st.session_state.card_flipped = False
+            st.rerun()
+
+    with col2:
+        if st.button("⭕ 正解", use_container_width=True):
+            prog = q["progression"] // 10
+            prog = min(prog + 1, 2)
+            new_prog = prog * 10 + (q["progression"] % 10)
+
+            supabase.table("words").update({
+                "progression": new_prog
+            }).eq("id", q["id"]).execute()
+
+            st.session_state.num += 1
+            st.session_state.card_flipped = False
+            st.rerun()
+
 
 # ===================== セット終了画面 =====================
 elif st.session_state.screen == "finish":
