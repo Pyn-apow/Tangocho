@@ -28,7 +28,7 @@ if "screen" not in st.session_state:
 
 # ===================== 総単語数と学習率 =====================
 if st.session_state.progress_cache is None:
-    learned, total = 0, 0
+    learned1,learned2,total = 0,0,0
     offset = 0
     limit = 1000
     while True:
@@ -36,19 +36,23 @@ if st.session_state.progress_cache is None:
         data = res.data or []
         if not data:
             break
-        learned += sum(1 for w in data if w["progression"] == 2)
+        learned1 += sum(1 for w in data if w["progression"] % 10 == 2)
+        learned2 += sum(1 for w in data if w["progression"] //10 == 2)
         total += len(data)
         if len(data) < limit:
             break
         offset += limit
-    st.session_state.progress_cache = (learned, total)
+    st.session_state.progress_cache = (learned1,learned2, total)
 else:
-    learned, total = st.session_state.progress_cache
+    learned1,learned2, total = st.session_state.progress_cache
 
-rate = learned / total if total else 0
+rate1 = learned1 / total if total else 0
+rate2 = learned2 / total if total else 0
 st.sidebar.markdown("### 📊 学習状況")
-st.sidebar.progress(rate)
-st.sidebar.write(f"習得済み：{learned} / {total} ({int(rate*100)}%)")
+st.sidebar.progress(rate1)
+st.sidebar.write(f"英日習得済み：{learned1} / {total} ({int(rate1*100)}%)")
+st.sidebar.progress(rate2)
+st.sidebar.write(f"日英習得済み：{learned2} / {total} ({int(rate2*100)}%)")
 
 # ===================== タイトル画面 =====================
 if st.session_state.screen == "title":
