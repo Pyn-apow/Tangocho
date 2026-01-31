@@ -14,7 +14,7 @@ if "screen" not in st.session_state:
         "set_index": None,
         "study_mode": "日英クイズ",
         "question_count": 5,
-        "mode": "",
+        "mode": "全単語",
         "current_questions": [],
         "user_answers": [],
         "user_my_flags": [],
