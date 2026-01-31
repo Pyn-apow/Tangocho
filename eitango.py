@@ -243,11 +243,11 @@ elif st.session_state.screen == "finish":
     # ===== 英日単語帳 =====
     if st.session_state.study_mode == "英日単語帳":
         for q, result in zip(questions, st.session_state.card_results):
-            # 一の位（英日）
-            prog_enjp = q["progression"] % 10
+            # 十の位（英日）
+            prog_enjp = q["progression"] // 10
             prog_enjp = min(prog_enjp + 1, 2) if result == 1 else 0
 
-            new_prog = (q["progression"] // 10) * 10 + prog_enjp
+            new_prog = prog_enjp * 10 + (q["progression"] % 10)
 
             supabase.table("words").update({
                 "progression": new_prog
@@ -260,11 +260,11 @@ elif st.session_state.screen == "finish":
             st.session_state.user_answers,
             st.session_state.user_my_flags
         ):
-            # 十の位（日英）
-            prog_jpen = q["progression"] // 10
+            # 一の位（日英）
+            prog_jpen = q["progression"] % 10
             prog_jpen = min(prog_jpen + 1, 2) if answer.lower() == q["en"].lower() else 0
 
-            new_prog = prog_jpen * 10 + (q["progression"] % 10)
+            new_prog = (q["progression"] // 10) * 10 + prog_jpen
 
             supabase.table("words").update({
                 "progression": new_prog,
