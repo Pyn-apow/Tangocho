@@ -52,9 +52,9 @@ rate1 = learned1 / total if total else 0
 rate2 = learned2 / total if total else 0
 st.sidebar.markdown("### 📊 学習状況")
 st.sidebar.progress(rate1)
-st.sidebar.write(f"英日習得済み：{learned1} / {total} ({int(rate1*100)}%)")
+st.sidebar.write(f"日英習得済み：{learned1} / {total} ({int(rate1*100)}%)")
 st.sidebar.progress(rate2)
-st.sidebar.write(f"日英習得済み：{learned2} / {total} ({int(rate2*100)}%)")
+st.sidebar.write(f"英日習得済み：{learned2} / {total} ({int(rate2*100)}%)")
 
 # ===================== タイトル画面 =====================
 if st.session_state.screen == "title":
@@ -127,7 +127,10 @@ elif st.session_state.screen == "select":
                 end_id = start_id + 99
                 query = supabase.table("words").select("id,jp,en,progression,my").gte("id", start_id).lte("id", end_id)
                 if st.session_state.mode == "未習得語":
-                    query = query.lt("progression", 2)
+                    if st.session_state.study_mode == "英日単語帳":
+                        query = query.lt("progression",20)
+                    else:
+                        query = query.in_("progression", [0,1,10,11,20,21])
                 elif st.session_state.mode == "my単語":
                     query = query.eq("my", True)
                 res = query.execute()
